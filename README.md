@@ -38,6 +38,9 @@ soliguard/
     whitelist.py      # 더미/테스트 값 제외
     engine.py         # 오케스트레이터: 등록·스캔·중복정리·집계
   extractors.py       # ── 추출 계층 ── 포맷별 텍스트 추출(txt/csv/xlsx/docx/hwp(x)/pdf/이미지)
+  design_extractors.py# 디자인 파일(PSD/XD) 텍스트 추출(디자이너 직무, XD는 표준 라이브러리)
+  figma_scan.py       # Figma 클라우드 검사(옵트인: 동의+토큰, 검출 후 즉시 폐기)
+  profiles.py         # 직무별 스캔 프로파일 기본값(확장자·폴더·OCR)
   actions.py          # ── 조치 계층 ── 마스킹 / AES-256-GCM 격리·복원 / 안전 삭제 + 감사 로그
   report.py           # ── 리포트 계층 ── PDF 진단서 생성(마스킹 값만 기재, reportlab)
   scanner.py          # 스캔 오케스트레이션: 추출→검출, '검사불가' 격리

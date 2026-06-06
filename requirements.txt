@@ -11,6 +11,10 @@ reportlab>=4.1
 # GUI (데스크톱 앱). 핵심 엔진/CLI는 PySide6 없이 동작.
 PySide6>=6.6
 
+# 디자인 파일 검사(디자이너 직무). XD는 표준 라이브러리로 동작.
+psd-tools>=1.9     # PSD 텍스트 레이어·래스터 추출
+requests>=2.31     # Figma REST API (옵트인 검사)
+
 # 엑셀(.xlsx) 정밀 파싱 (없으면 표준 라이브러리 폴백 사용)
 openpyxl>=3.1
 # 구형 엑셀(.xls)

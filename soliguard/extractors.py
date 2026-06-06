@@ -37,9 +37,12 @@ SUPPORTED_OFFICE = {".xlsx", ".xls", ".docx"}
 SUPPORTED_HWP = {".hwp", ".hwpx"}
 SUPPORTED_PDF = {".pdf"}
 SUPPORTED_IMAGE = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+# 디자인 파일(디자이너 직무). 실제 추출은 design_extractors 가 담당.
+SUPPORTED_DESIGN = {".psd", ".psb", ".xd"}
 
 _ALL_SUPPORTED = (
-    SUPPORTED_TEXT | SUPPORTED_OFFICE | SUPPORTED_HWP | SUPPORTED_PDF | SUPPORTED_IMAGE
+    SUPPORTED_TEXT | SUPPORTED_OFFICE | SUPPORTED_HWP | SUPPORTED_PDF
+    | SUPPORTED_IMAGE | SUPPORTED_DESIGN
 )
 
 
@@ -68,6 +71,10 @@ def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
             return _extract_pdf(path, ocr_enabled)
         if ext in SUPPORTED_IMAGE:
             return _extract_image(path) if ocr_enabled else ""
+        if ext in SUPPORTED_DESIGN:
+            from .design_extractors import extract_design_text
+
+            return extract_design_text(path, ocr_enabled)
         raise ExtractionError(f"미지원 형식: {ext}")
     except ExtractionError:
         raise
