@@ -293,6 +293,14 @@ class MainWindow(QMainWindow):
         head.addWidget(back)
         lay.addLayout(head)
 
+        self.unread_banner = QLabel()
+        self.unread_banner.setWordWrap(True)
+        self.unread_banner.setStyleSheet(
+            "background:#FFF4E5; border:1px solid #F3D9A8; border-radius:8px;"
+            " color:#9A6B12; padding:10px 12px;")
+        self.unread_banner.setVisible(False)
+        lay.addWidget(self.unread_banner)
+
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["위험도", "파일", "검출 항목", "검출값(마스킹)"])
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -493,23 +501,48 @@ class MainWindow(QMainWindow):
 
     def _on_finished(self, summary):
         self.file_results = summary.file_results
+        skipped = summary.skipped
         disp = GRADE_DISPLAY.get(summary.risk_grade, {})
         color = disp.get("color", "#94A3B8")
+        # 검사불가가 있으면 0건이라도 '안전'으로 단정하지 않는다(주의 색).
+        if summary.total_findings == 0 and skipped > 0:
+            color = SEMANTIC["warn"]
+            self.grade_label.setText(
+                f"내 PC 위험 등급: 🟡 확인 필요 (미검사 {skipped}건)")
+        else:
+            self.grade_label.setText(
+                f"내 PC 위험 등급: {disp.get('icon','')} {summary.risk_grade}")
         self.grade_dot.setStyleSheet(f"background:{color}; border-radius:9px;")
-        self.grade_label.setText(f"내 PC 위험 등급: {disp.get('icon','')} {summary.risk_grade}")
         self.result_title.setText(
             f"점검 결과 — 위험 {summary.total_findings}건 "
-            f"(검사 {summary.scanned} / 검사불가 {summary.skipped})")
+            f"(검사 {summary.scanned} / 검사불가 {skipped})")
+
+        # 검사불가 배너
+        if skipped > 0:
+            names = [r.path.name for r in summary.file_results
+                     if r.status == "검사불가"][:8]
+            more = "" if skipped <= 8 else f" 외 {skipped - 8}건"
+            self.unread_banner.setText(
+                f"⚠  {skipped}개 파일을 검사하지 못했습니다(파서/OCR 미설치 또는 손상). "
+                f"이 파일들은 위험 여부를 확인하지 못했습니다.\n· "
+                + ", ".join(names) + more)
+            self.unread_banner.setVisible(True)
+        else:
+            self.unread_banner.setVisible(False)
+
         self._populate_table(summary.file_results)
         self._render_recent()
-        if summary.total_findings == 0:
+
+        if summary.total_findings == 0 and skipped == 0:
             QMessageBox.information(
                 self, "점검 완료",
                 f"🟢 안전합니다 — 점검한 {summary.scanned}개 파일에서 위험을 찾지 못했어요.")
             self.stack.setCurrentWidget(self.dashboard)
         else:
             self.stack.setCurrentWidget(self.results)
-        self.scan_finished.emit(summary.risk_grade_key)
+        self.scan_finished.emit(
+            "warn" if (summary.total_findings == 0 and skipped > 0)
+            else summary.risk_grade_key)
 
     def _populate_table(self, results):
         self.table.setRowCount(0)

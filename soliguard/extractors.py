@@ -275,15 +275,52 @@ def _extract_pdf(path: Path, ocr_enabled: bool) -> str:
     return text
 
 
+_TESSERACT_PATHS = [
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    "/usr/bin/tesseract",
+]
+_ocr_ready = False
+_ocr_lang = "eng"
+
+
+def _configure_ocr() -> str:
+    """Tesseract 실행 경로·언어 자동 설정. 사용 가능 언어(kor 포함 여부) 반환."""
+    global _ocr_ready, _ocr_lang
+    if _ocr_ready:
+        return _ocr_lang
+    import os
+
+    import pytesseract  # type: ignore
+
+    for p in _TESSERACT_PATHS:
+        if os.path.exists(p):
+            pytesseract.pytesseract.tesseract_cmd = p
+            break
+    # kor 포함 사용자 tessdata 우선
+    user_td = os.path.join(
+        os.environ.get("LOCALAPPDATA", ""), "SoliGuard", "tessdata")
+    if os.path.isdir(user_td):
+        os.environ["TESSDATA_PREFIX"] = user_td
+    try:
+        langs = set(pytesseract.get_languages(config=""))
+    except Exception:
+        langs = set()
+    _ocr_lang = "kor+eng" if "kor" in langs else "eng"
+    _ocr_ready = True
+    return _ocr_lang
+
+
 def _extract_image(path: Path) -> str:
-    """이미지 OCR - 신분증·계약서 스캔본(로컬 Tesseract 기본). pytesseract 필요."""
+    """이미지 OCR - 신분증·계약서 스캔본(로컬 Tesseract). pytesseract 필요."""
     try:
         import pytesseract  # type: ignore
         from PIL import Image  # type: ignore
     except ImportError:
         raise ExtractionError("이미지 OCR에 pytesseract/Pillow 가 필요합니다")
+    lang = _configure_ocr()
     img = Image.open(str(path))
-    return pytesseract.image_to_string(img, lang="kor+eng")
+    return pytesseract.image_to_string(img, lang=lang)
 
 
 def _ocr_pdf(path: Path) -> str:
@@ -293,8 +330,9 @@ def _ocr_pdf(path: Path) -> str:
         import pytesseract  # type: ignore
     except ImportError:
         raise ExtractionError("스캔 PDF OCR에 pdf2image/pytesseract 가 필요합니다")
+    lang = _configure_ocr()
     parts = [
-        pytesseract.image_to_string(img, lang="kor+eng")
+        pytesseract.image_to_string(img, lang=lang)
         for img in convert_from_path(str(path), dpi=200)
     ]
     return "\n".join(parts)
