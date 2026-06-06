@@ -109,8 +109,33 @@ def build_qss(theme: str = "light") -> str:
     }}
     QComboBox {{
         background: {t['surface']}; border: 1px solid {t['border']};
-        border-radius: 6px; padding: 4px 8px; color: {t['textPrimary']};
+        border-radius: 6px; padding: 6px 10px; color: {t['textPrimary']};
+        min-height: 20px;
     }}
+    QComboBox::drop-down {{ border: none; width: 22px; }}
+    QComboBox QAbstractItemView {{
+        background: {t['surface']}; color: {t['textPrimary']};
+        border: 1px solid {t['border']};
+        selection-background-color: {BRAND['crimson']};
+        selection-color: white; outline: 0;
+    }}
+    QLabel {{ background: transparent; }}
+    QLineEdit, QCheckBox {{ color: {t['textPrimary']}; }}
+    QLineEdit {{
+        background: {t['surface']}; border: 1px solid {t['border']};
+        border-radius: 6px; padding: 6px 8px;
+    }}
+    QGroupBox {{
+        border: 1px solid {t['border']}; border-radius: 12px;
+        margin-top: 12px; padding: 12px; font-weight: 600;
+    }}
+    QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 6px; }}
+    QPushButton#Ghost {{
+        background: transparent; color: {t['textSecondary']};
+        border: 1px solid {t['border']}; border-radius: 8px;
+        min-height: 36px; padding: 0 14px;
+    }}
+    QPushButton#Ghost:hover {{ background: {t['surfaceAlt']}; }}
     QProgressBar {{
         border: none; border-radius: 6px; background: {t['surfaceAlt']};
         height: 12px; text-align: center;
