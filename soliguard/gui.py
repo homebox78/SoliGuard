@@ -54,15 +54,19 @@ class ScanWorker(QThread):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    scan_finished = Signal(str)  # risk_grade_key ("safe"/"warn"/"danger")
+
+    def __init__(self, cfg=None):
         super().__init__()
         self.setWindowTitle("SoliGuard")
         self.resize(1280, 800)
-        self.profile = "개발자"
-        self.theme = "light"
+        self.cfg = cfg
+        self.profile = getattr(cfg, "profile", None) or "개발자"
+        self.theme = getattr(cfg, "theme", None) or "light"
         self.worker: ScanWorker | None = None
         self.file_results: list = []
         self.row_index: list[tuple[Path, object]] = []  # row → (path, finding)
+        self._tray_active = False  # app.py 가 트레이 상주 시 True 로 설정
 
         root = QWidget()
         root_lay = QHBoxLayout(root)
@@ -93,6 +97,8 @@ class MainWindow(QMainWindow):
 
         self.profile_box = QComboBox()
         self.profile_box.addItems(list(PROFILE_ROLE.keys()))
+        if self.profile in PROFILE_ROLE:
+            self.profile_box.setCurrentText(self.profile)
         self.profile_box.currentTextChanged.connect(self._on_profile_changed)
         self.profile_box.setStyleSheet("margin:0 24px;")
         lay.addWidget(QLabel("  직무"))
@@ -199,6 +205,14 @@ class MainWindow(QMainWindow):
         if app:
             app.setStyleSheet(build_qss(self.theme))
 
+    def closeEvent(self, event):
+        """트레이 상주 중이면 종료 대신 숨김(상용 앱 동작). 아니면 정상 종료."""
+        if self._tray_active:
+            event.ignore()
+            self.hide()
+        else:
+            event.accept()
+
     def start_scan(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "스캔할 폴더 선택")
         if not folder:
@@ -233,6 +247,7 @@ class MainWindow(QMainWindow):
         )
         self._populate_table(summary.file_results)
         self.stack.setCurrentWidget(self.results)
+        self.scan_finished.emit(summary.risk_grade_key)
 
     def _populate_table(self, results: list) -> None:
         self.table.setRowCount(0)
