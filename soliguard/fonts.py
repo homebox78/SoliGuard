@@ -1,57 +1,56 @@
-"""Pretendard 폰트 로딩 - Qt에 직접 등록해 앱 전체 폰트를 통일한다.
+"""Pretendard 폰트 로딩 - 앱에 '번들된' ttf를 직접 등록해 어디서나 동일 적용.
 
-Windows에 Pretendard ttf가 설치돼 있어도 Qt가 자동 인식하지 못하는 경우가 있어
-(QFontDatabase.families() 미노출), addApplicationFont 로 명시 등록한다.
+근본 원칙(반복 누락 방지):
+  - 시스템 설치 여부에 의존하지 않는다. assets/fonts 에 번들한 Pretendard ttf 를
+    QFontDatabase.addApplicationFont 로 '항상' 등록하고, 그 패밀리를 앱 기본 폰트로
+    설정한다. → 개발/배포(PyInstaller) 환경 모두에서 보장된다.
+  - 검증은 요청 패밀리가 아니라 실제 등록 결과(applicationFontFamilies)로 한다.
 """
 
 from __future__ import annotations
 
-import os
+import sys
+from pathlib import Path
 
 FAMILY = "Pretendard"
+_WEIGHTS = ("Regular", "Medium", "SemiBold", "Bold")
+_loaded_family: str | None = None
 
-# 등록 시도 경로(시스템/사용자). 여러 굵기를 등록해 weight 렌더링을 보장.
-_WEIGHTS = ["Regular", "Medium", "SemiBold", "Bold", "Light", "ExtraBold"]
-_DIRS = [
-    "C:/Windows/Fonts",
-    os.path.expandvars(r"%LOCALAPPDATA%/Microsoft/Windows/Fonts"),
-    "/usr/share/fonts/truetype/pretendard",
-]
 
-_loaded = False
+def _font_dir() -> Path:
+    # PyInstaller 로 묶이면 _MEIPASS 아래 assets/fonts 에 위치
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    d = base / "assets" / "fonts"
+    if d.is_dir():
+        return d
+    # 패키지 기준 상위 경로 폴백
+    return Path(__file__).resolve().parent.parent / "assets" / "fonts"
 
 
 def load_fonts(app=None) -> str:
-    """Pretendard 를 Qt 애플리케이션에 등록하고 기본 폰트로 설정. 패밀리명 반환.
-
-    등록 실패(파일 없음) 시 시스템 기본 폰트 패밀리를 반환한다.
-    """
-    global _loaded
+    """번들 Pretendard 를 등록하고 앱 기본 폰트로 설정. 등록된 패밀리명 반환."""
+    global _loaded_family
     from PySide6.QtGui import QFont, QFontDatabase
 
-    family = FAMILY
-    if not _loaded:
-        added_any = False
-        # 이미 시스템에 노출돼 있으면 그대로 사용
-        if FAMILY in QFontDatabase.families():
-            added_any = True
-        else:
-            for d in _DIRS:
-                for wt in _WEIGHTS:
-                    path = os.path.join(d, f"Pretendard-{wt}.ttf")
-                    if os.path.exists(path):
-                        fid = QFontDatabase.addApplicationFont(path)
-                        fams = QFontDatabase.applicationFontFamilies(fid)
-                        if fams:
-                            family = fams[0]
-                            added_any = True
-        _loaded = True
-        if not added_any:
-            # 폴백: 등록 실패 시 시스템 기본 유지
-            return app.font().family() if app is not None else family
+    if _loaded_family is None:
+        fam = None
+        fdir = _font_dir()
+        for wt in _WEIGHTS:
+            p = fdir / f"Pretendard-{wt}.ttf"
+            if p.exists():
+                fid = QFontDatabase.addApplicationFont(str(p))
+                fams = QFontDatabase.applicationFontFamilies(fid)
+                if fams:
+                    fam = fams[0]
+        # 번들이 없으면 시스템 등록분 사용(최후 폴백)
+        if fam is None and FAMILY in QFontDatabase.families():
+            fam = FAMILY
+        _loaded_family = fam or FAMILY
 
     if app is not None:
-        f = QFont(family, 10)
+        f = QFont(_loaded_family, 10)
         f.setStyleStrategy(QFont.PreferAntialias)
         app.setFont(f)
-    return family
+        # 패밀리가 'Pretendard'가 아닐 수도 있으니 QSS도 함께 일치시키도록 노출
+        app.setProperty("appFontFamily", _loaded_family)
+    return _loaded_family

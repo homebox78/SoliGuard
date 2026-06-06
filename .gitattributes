@@ -6,3 +6,6 @@
 *.hwpx binary
 *.pdf binary
 *.ico binary
+*.ttf binary
+*.bmp binary
+*.png binary
