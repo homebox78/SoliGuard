@@ -5,7 +5,7 @@
 /* ---------- shared small bits ---------- */
 function Box({ on, sq }) {
   return (
-    <span style={{ width: 20, height: 20, borderRadius: sq ? 6 : '50%', flex: 'none', display: 'grid', placeItems: 'center', marginTop: 1,
+    <span style={{ width: 20, height: 20, borderRadius: sq ? 6 : '50%', flex: 'none', display: 'grid', placeItems: 'center',
       border: '1.7px solid ' + (on ? 'var(--brand)' : 'var(--border-strong)'), background: on ? 'var(--brand)' : '#fff', transition: 'all .12s' }}>
       {on && (sq ? <Icon name="check" size={13} stroke={3} style={{ color: '#fff' }} /> : <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#fff' }} />)}
     </span>
@@ -24,38 +24,88 @@ function WinControls({ onClose }) {
 /* ====================== DESKTOP ====================== */
 function Desktop({ installed, running, onOpenSetup, onOpenApp }) {
   const [sel, setSel] = React.useState(null);
+  const [startOpen, setStartOpen] = React.useState(false);
+  const [hintGone, setHintGone] = React.useState(installed);
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const openSetup = () => { setHintGone(true); onOpenSetup(); };
+  const showHint = !installed && !hintGone;
   return (
-    <div className="desktop" onClick={() => setSel(null)}>
+    <div className="desktop" onClick={() => { setSel(null); setStartOpen(false); }}>
       <div className="desktop-watermark"><Icon name="shieldCheck" size={360} stroke={0.6} /></div>
 
       <div className="dt-icons" onClick={e => e.stopPropagation()}>
-        <div className={'dt-icon' + (sel === 'setup' ? ' sel' : '')} onClick={() => setSel('setup')} onDoubleClick={onOpenSetup}>
-          <SetupIcon size={50} />
+        <div className={'dt-icon' + (sel === 'setup' ? ' sel' : '')} onClick={() => setSel('setup')} onDoubleClick={openSetup} title="더블클릭하여 설치 시작">
+          <div style={{ position: 'relative' }}>
+            {showHint && <span className="setup-pulse" />}
+            <SetupIcon size={50} />
+          </div>
           <span className="lbl">SoliGuard_<br />Setup.exe</span>
         </div>
         {installed && (
-          <div className={'dt-icon' + (sel === 'app' ? ' sel' : '')} onClick={() => setSel('app')} onDoubleClick={onOpenApp}>
+          <div className={'dt-icon' + (sel === 'app' ? ' sel' : '')} onClick={() => setSel('app')} onDoubleClick={onOpenApp} title="솔리가드 실행">
             <AppIcon size={50} />
             <span className="lbl">솔리가드<br />SoliGuard</span>
           </div>
         )}
-        <div className={'dt-icon' + (sel === 'trash' ? ' sel' : '')} onClick={() => setSel('trash')}>
+        <div className={'dt-icon' + (sel === 'proj' ? ' sel' : '')} onClick={() => setSel('proj')} title="C:\Projects\고객사A">
+          <span style={{ position: 'relative', width: 50, height: 50, display: 'grid', placeItems: 'center' }}>
+            <svg width="50" height="50" viewBox="0 0 24 24" fill="none"><path d="M3 6.5C3 5.7 3.7 5 4.5 5h4.2l1.8 2h9C20.3 7 21 7.7 21 8.5V18c0 .8-.7 1.5-1.5 1.5h-15C3.7 19.5 3 18.8 3 18V6.5z" fill="#F4C04E"/><path d="M3 9h18v9c0 .8-.7 1.5-1.5 1.5h-15C3.7 19.5 3 18.8 3 18V9z" fill="#F7D070"/></svg>
+          </span>
+          <span className="lbl">프로젝트_<br />고객사A</span>
+        </div>
+        <div className={'dt-icon' + (sel === 'pc' ? ' sel' : '')} onClick={() => setSel('pc')} title="내 PC">
+          <span style={{ width: 50, height: 50, borderRadius: 12, background: 'rgba(255,255,255,.12)', display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.9)' }}><Icon name="hardDrive" size={26} /></span>
+          <span className="lbl">내 PC</span>
+        </div>
+        <div className={'dt-icon' + (sel === 'trash' ? ' sel' : '')} onClick={() => setSel('trash')} title="휴지통">
           <span style={{ width: 50, height: 50, borderRadius: 12, background: 'rgba(255,255,255,.12)', display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.85)' }}><Icon name="trash" size={26} /></span>
           <span className="lbl">휴지통</span>
         </div>
       </div>
 
+      {showHint && (
+        <div className="dt-callout" onClick={e => { e.stopPropagation(); openSetup(); }} style={{ cursor: 'pointer' }}>
+          <span style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand)', color: '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}><Icon name="download" size={15} stroke={2.4} /></span>
+          <span><b>SoliGuard_Setup.exe</b>를<br />더블클릭하여 설치를 시작하세요</span>
+        </div>
+      )}
+
+      {startOpen && (
+        <div className="startmenu" onClick={e => e.stopPropagation()}>
+          <div className="tb-search" style={{ width: '100%', marginBottom: 14, cursor: 'text' }}><Icon name="search" size={15} /> 앱, 설정, 문서 검색</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.5)', letterSpacing: '.06em', margin: '4px 4px 8px' }}>고정됨</div>
+          <div className="sm-tile" onClick={installed ? onOpenApp : openSetup}>
+            <AppIcon size={36} glow={false} />
+            <div><div style={{ fontWeight: 700, fontSize: 13.5 }}>솔리가드 SoliGuard</div><div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.6)' }}>{installed ? '개인정보 점검 도구' : '설치되지 않음 — 클릭하여 설치'}</div></div>
+          </div>
+          <div className="sm-tile" onClick={() => setSel('proj')}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M3 6.5C3 5.7 3.7 5 4.5 5h4.2l1.8 2h9C20.3 7 21 7.7 21 8.5V18c0 .8-.7 1.5-1.5 1.5h-15C3.7 19.5 3 18.8 3 18V6.5z" fill="#F4C04E"/><path d="M3 9h18v9c0 .8-.7 1.5-1.5 1.5h-15C3.7 19.5 3 18.8 3 18V9z" fill="#F7D070"/></svg>
+            <div><div style={{ fontWeight: 700, fontSize: 13.5 }}>프로젝트_고객사A</div><div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.6)' }}>C:\Projects\고객사A</div></div>
+          </div>
+        </div>
+      )}
+
       <div className="taskbar" onClick={e => e.stopPropagation()}>
-        <div className="tb-app"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></div>
-        <div className="tb-app"><Icon name="search" size={17} /></div>
-        {(installed || running) && <div className={'tb-app' + (running ? ' run' : '')} onClick={installed ? onOpenApp : onOpenSetup}><AppIcon size={26} glow={false} /></div>}
+        <div className="tb-start" onClick={() => setStartOpen(o => !o)}>
+          <svg width="19" height="19" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.2" fill="#5BBEFA"/><rect x="13" y="3" width="8" height="8" rx="1.2" fill="#48D597"/><rect x="3" y="13" width="8" height="8" rx="1.2" fill="#F4C04E"/><rect x="13" y="13" width="8" height="8" rx="1.2" fill="#EE6285"/></svg>
+        </div>
+        <div className="tb-search"><Icon name="search" size={15} /> 검색</div>
+        <div className="tb-divider" />
+        {(installed || running) && <div className={'tb-app' + (running ? ' run' : '')} onClick={installed ? onOpenApp : openSetup} title="솔리가드"><AppIcon size={26} glow={false} /></div>}
+        <div className="tb-app" title="파일 탐색기"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 7c0-.8.7-1.5 1.5-1.5h4l1.5 1.8h9c.8 0 1.5.7 1.5 1.5V17c0 .8-.7 1.5-1.5 1.5h-15C3.7 18.5 3 17.8 3 17V7z" fill="#F4C04E"/><path d="M3 9.5h18V17c0 .8-.7 1.5-1.5 1.5h-15C3.7 18.5 3 17.8 3 17V9.5z" fill="#FAD980"/></svg></div>
         <div className="tray">
-          <Icon name="shield" size={16} />
-          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>한 <span style={{ fontSize: 10, opacity: .7 }}>A</span></span>
-          <span className="clock"><div>{time}</div><div style={{ fontSize: 11, opacity: .8 }}>{date}</div></span>
+          <div className="tray-glyphs">
+            {/* wifi */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></svg>
+            {/* volume */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M17 9a4 4 0 0 1 0 6" fill="none"/></svg>
+            {/* battery */}
+            <svg width="22" height="16" viewBox="0 0 28 16" fill="none"><rect x="1" y="3" width="22" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.6"/><rect x="3" y="5" width="15" height="6" rx="1" fill="currentColor"/><rect x="24.5" y="6" width="2" height="4" rx="1" fill="currentColor"/></svg>
+          </div>
+          <span className="tray-glyphs" style={{ gap: 4 }}>한 <span style={{ fontSize: 10, opacity: .7 }}>A</span></span>
+          <span className="clock"><div>{time}</div><div style={{ fontSize: 11, opacity: .85 }}>{date}</div></span>
         </div>
       </div>
     </div>
@@ -377,16 +427,16 @@ function OnbRoles({ roles, toggleRole }) {
     <div className="fade-up">
       <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 800 }}>어떤 업무를 하시나요?</h2>
       <p style={{ color: 'var(--text-2)', fontSize: 13, marginBottom: 16 }}>선택한 직무에 맞춰 점검 항목을 구성합니다. <b style={{ color: 'var(--brand)' }}>복수 선택</b>할 수 있어요.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 9 }}>
         {ROLES.map(r => {
           const on = roles.includes(r.id);
           return (
             <button key={r.id} className={'chk-card' + (on ? ' on' : '')} onClick={() => toggleRole(r.id)}>
               <Box on={on} sq />
               <span style={{ width: 34, height: 34, borderRadius: 9, background: on ? 'var(--brand)' : 'var(--surface-alt)', color: on ? '#fff' : 'var(--text-2)', display: 'grid', placeItems: 'center', flex: 'none' }}><Icon name={r.icon} size={18} /></span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 700, color: on ? 'var(--brand)' : 'var(--text)', display: 'block' }}>{r.id}</span>
-                <span style={{ fontSize: 11.5, color: 'var(--text-2)', display: 'block', lineHeight: 1.4, marginTop: 2 }}>{r.desc}</span>
+              <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                <span style={{ fontSize: 12.2, fontWeight: 700, color: on ? 'var(--brand)' : 'var(--text)', display: 'block', whiteSpace: 'nowrap' }}>{r.id}</span>
+                <span style={{ fontSize: 10.4, color: 'var(--text-2)', display: 'block', lineHeight: 1.4, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.desc}</span>
               </span>
             </button>
           );

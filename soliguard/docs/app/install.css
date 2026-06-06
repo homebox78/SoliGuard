@@ -34,12 +34,38 @@
   border-top: 1px solid rgba(255,255,255,.08);
   display: flex; align-items: center; gap: 6px; padding: 0 10px;
 }
-.tb-app { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; cursor: pointer; color: #fff; transition: background .12s; }
+.tb-start { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 14px 0 11px; border-radius: 8px; cursor: pointer; color: #fff; transition: background .12s; }
+.tb-start:hover { background: rgba(255,255,255,.12); }
+.tb-search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 999px; cursor: text;
+  background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.7); font-size: 12.5px; min-width: 168px; transition: background .12s; }
+.tb-search:hover { background: rgba(255,255,255,.16); }
+.tb-divider { width: 1px; height: 22px; background: rgba(255,255,255,.12); margin: 0 4px; }
+.tb-app { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; cursor: pointer; color: #fff; transition: background .12s; position: relative; }
 .tb-app:hover { background: rgba(255,255,255,.12); }
-.tb-app.run { background: rgba(255,255,255,.10); position: relative; }
+.tb-app.run { background: rgba(255,255,255,.10); }
 .tb-app.run::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 16px; height: 3px; border-radius: 3px; background: var(--brand-strong); }
-.tray { margin-left: auto; display: flex; align-items: center; gap: 14px; color: rgba(255,255,255,.85); font-size: 12px; padding-right: 8px; }
-.tray .clock { text-align: right; line-height: 1.25; }
+.tray { margin-left: auto; display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,.88); font-size: 12px; padding-right: 4px; }
+.tray-glyphs { display: flex; align-items: center; gap: 11px; padding: 6px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
+.tray-glyphs:hover { background: rgba(255,255,255,.10); }
+.tray .clock { text-align: right; line-height: 1.22; padding: 4px 8px; border-radius: 8px; cursor: pointer; transition: background .12s; }
+.tray .clock:hover { background: rgba(255,255,255,.10); }
+
+/* setup-icon attention */
+.setup-pulse { position: absolute; inset: -7px; border-radius: 16px; border: 2px solid rgba(255,170,190,.85); animation: setupPulse 2s ease-out infinite; pointer-events: none; }
+@keyframes setupPulse { 0% { transform: scale(.86); opacity: .9; } 70% { opacity: 0; } 100% { transform: scale(1.18); opacity: 0; } }
+
+.dt-callout { position: absolute; left: 124px; top: 40px; z-index: 5; display: flex; align-items: center; gap: 9px;
+  background: #fff; color: var(--text); border-radius: 12px; padding: 11px 15px; font-size: 13px; font-weight: 600;
+  box-shadow: 0 14px 36px rgba(0,0,0,.36); animation: floatY 2.4s ease-in-out infinite; width: 246px; line-height: 1.45; word-break: keep-all; }
+.dt-callout::before { content: ""; position: absolute; left: -7px; top: 22px; width: 14px; height: 14px; background: #fff; transform: rotate(45deg); border-radius: 2px; }
+@keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+/* start menu */
+.startmenu { position: absolute; left: 10px; bottom: 56px; width: 360px; z-index: 35;
+  background: rgba(28,22,28,.92); backdrop-filter: blur(28px) saturate(1.5); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px; box-shadow: 0 30px 70px rgba(0,0,0,.5); padding: 18px; color: #fff; animation: winIn .18s ease; }
+.sm-tile { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background .12s; }
+.sm-tile:hover { background: rgba(255,255,255,.1); }
 
 /* ---- Installer / onboarding window ---- */
 .os-win {
@@ -70,7 +96,7 @@
 .inst-content { flex: 1; padding: 30px 32px; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
 .inst-foot { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); }
 
-.chk-card { display: flex; align-items: flex-start; gap: 12px; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; transition: border-color .12s, background .12s; }
+.chk-card { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; transition: border-color .12s, background .12s; }
 .chk-card:hover { border-color: var(--border-strong); }
 .chk-card.on { border-color: var(--brand); background: var(--pink-50); }
 
