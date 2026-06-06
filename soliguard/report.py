@@ -125,7 +125,7 @@ def generate_pdf_report(
     width, height = A4
 
     # ── 헤더 ── (Solideo 크림슨)
-    c.setFillColor(colors.HexColor("#C8174E"))
+    c.setFillColor(colors.HexColor("#B0123F"))
     c.rect(0, height - 22 * mm, width, 22 * mm, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont(font, 18)

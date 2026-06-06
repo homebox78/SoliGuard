@@ -27,54 +27,54 @@ _STEPS = ["직무", "점검 설정"]
 
 _QSS = """
 * { font-family: 'Pretendard'; }
-#Backdrop { background: #EFE6EA; }
+#Backdrop { background: #F3F4F7; }
 #Card { background: #FFFFFF; border-radius: 18px; }
 #Brand { font-size: 17px; }
 #Pill {
-    background: #FCE4EC; color: #C8174E; border-radius: 11px;
+    background: #FCEFF3; color: #B0123F; border-radius: 11px;
     padding: 4px 12px; font-size: 12px; font-weight: 700;
 }
-#IconBadge { background: #C8174E; border-radius: 13px; color: white; font-size: 22px; }
-#Title { font-size: 21px; font-weight: 800; color: #231815; }
-#Sub { color: #7A6A70; font-size: 13px; }
-#SectionLabel { font-size: 13px; font-weight: 700; color: #231815; }
+#IconBadge { background: #B0123F; border-radius: 13px; color: white; font-size: 22px; }
+#Title { font-size: 21px; font-weight: 800; color: #14161C; }
+#Sub { color: #565E6C; font-size: 13px; }
+#SectionLabel { font-size: 13px; font-weight: 700; color: #14161C; }
 #Trust {
-    background: #FBEFF3; border: 1px solid #F3D9E1; border-radius: 10px;
-    color: #8A4A5C; font-size: 12px;
+    background: #FCEFF3; border: 1px solid #F6D2DE; border-radius: 10px;
+    color: #5E0A24; font-size: 12px;
 }
 #StepNumActive {
-    background: #C8174E; color: white; border-radius: 14px; font-weight: 700;
+    background: #B0123F; color: white; border-radius: 14px; font-weight: 700;
 }
-#StepNumIdle { background: #E7DAE0; color: #9A8A90; border-radius: 14px; font-weight: 700; }
-#StepTextActive { color: #231815; font-weight: 700; font-size: 13px; }
-#StepTextIdle { color: #B0A0A6; font-size: 13px; }
-#Connector { background: #E7DAE0; }
+#StepNumIdle { background: #E7E9EE; color: #8B92A0; border-radius: 14px; font-weight: 700; }
+#StepTextActive { color: #14161C; font-weight: 700; font-size: 13px; }
+#StepTextIdle { color: #8B92A0; font-size: 13px; }
+#Connector { background: #E7E9EE; }
 QPushButton#Primary {
-    background: #C8174E; color: white; border: none; border-radius: 9px;
+    background: #B0123F; color: white; border: none; border-radius: 9px;
     min-height: 42px; padding: 0 24px; font-size: 14px; font-weight: 700;
 }
-QPushButton#Primary:hover { background: #B11343; }
-QPushButton#Primary:pressed { background: #990F39; }
+QPushButton#Primary:hover { background: #C7164A; }
+QPushButton#Primary:pressed { background: #930E33; }
 QPushButton#Ghost {
-    background: transparent; color: #7A6A70; border: 1px solid #E7DCE0;
+    background: transparent; color: #565E6C; border: 1px solid #E7E9EE;
     border-radius: 9px; min-height: 42px; padding: 0 18px; font-size: 14px;
 }
-QPushButton#Ghost:hover { background: #F4EEF0; }
+QPushButton#Ghost:hover { background: #F7F8FA; }
 QPushButton#RoleCard {
-    background: #FFFFFF; border: 1px solid #E7DCE0; border-radius: 12px;
-    color: #231815; font-size: 14px; font-weight: 600; text-align: center;
+    background: #FFFFFF; border: 1px solid #E7E9EE; border-radius: 12px;
+    color: #14161C; font-size: 14px; font-weight: 600; text-align: center;
 }
-QPushButton#RoleCard:hover { border-color: #E6A3BC; }
-QPushButton#RoleCard:checked { border: 2px solid #C8174E; background: #FCE4EC; }
+QPushButton#RoleCard:hover { border-color: #EEB6C8; }
+QPushButton#RoleCard:checked { border: 2px solid #B0123F; background: #FCEFF3; }
 QComboBox {
-    background: #FFFFFF; border: 1px solid #E7DCE0; border-radius: 8px;
-    padding: 8px 12px; color: #231815; min-height: 20px;
+    background: #FFFFFF; border: 1px solid #E7E9EE; border-radius: 8px;
+    padding: 8px 12px; color: #14161C; min-height: 20px;
 }
 QComboBox QAbstractItemView {
-    background: white; color: #231815; selection-background-color: #C8174E;
+    background: white; color: #14161C; selection-background-color: #B0123F;
     selection-color: white; outline: 0;
 }
-QCheckBox { color: #231815; font-size: 13px; }
+QCheckBox { color: #14161C; font-size: 13px; }
 """
 
 
@@ -117,8 +117,8 @@ class OnboardingWizard(QDialog):
             brand.setPixmap(logo_pix)
         else:
             brand = QLabel(
-                '<span style="color:#231815;font-weight:800;">solideo</span>'
-                '<span style="color:#C8174E;font-weight:800;">S.</span>')
+                '<span style="color:#14161C;font-weight:800;">solideo</span>'
+                '<span style="color:#B0123F;font-weight:800;">S.</span>')
             brand.setObjectName("Brand")
         top.addWidget(brand)
         top.addStretch()
@@ -132,7 +132,7 @@ class OnboardingWizard(QDialog):
         title_row.setSpacing(14)
         badge = QLabel()
         badge.setFixedSize(52, 52)
-        badge.setPixmap(icons.shield_pixmap(52, stroke=3, color="#FFFFFF", bg="#C8174E"))
+        badge.setPixmap(icons.shield_pixmap(52, stroke=3, color="#FFFFFF", bg="#B0123F"))
         badge.setAlignment(Qt.AlignCenter)
         title_row.addWidget(badge)
         tcol = QVBoxLayout()

@@ -2,31 +2,29 @@
 
 import unittest
 
-from soliguard.theme import GRADE_DISPLAY, build_qss, grade_color, severity_color
+from soliguard.theme import (
+    GRADE_DISPLAY, SEV_CHIP, build_qss, grade_color, severity_color,
+)
 
 
 class TestTheme(unittest.TestCase):
     def test_qss_light_contains_tokens(self):
         qss = build_qss("light")
-        self.assertIn("#C8174E", qss)   # Solideo 크림슨(주요 버튼)
+        self.assertIn("#B0123F", qss)     # solideo 크림슨(정본 brand)
+        self.assertIn("#F3F4F7", qss)     # 쿨그레이 배경
         self.assertIn("Pretendard", qss)  # 폰트 통일
-        self.assertIn("QProgressBar", qss)
-
-    def test_qss_dark_differs(self):
-        light = build_qss("light")
-        dark = build_qss("dark")
-        self.assertNotEqual(light, dark)
-        self.assertIn("#1A0E12", dark)  # dark bg(마룬 계열)
+        self.assertIn("#Sidebar", qss)
 
     def test_unknown_theme_falls_back_to_light(self):
         self.assertEqual(build_qss("nope"), build_qss("light"))
 
     def test_grade_and_severity_colors(self):
-        self.assertEqual(grade_color("위험"), "#DC2626")
-        self.assertEqual(grade_color("안전"), "#16A34A")
-        self.assertEqual(severity_color("높음"), "#DC2626")
-        self.assertEqual(severity_color("낮음"), "#16A34A")
+        self.assertEqual(grade_color("위험"), "#E11D2A")
+        self.assertEqual(grade_color("안전"), "#15A34A")
+        self.assertEqual(severity_color("높음"), "#E11D2A")
+        self.assertEqual(severity_color("낮음"), "#15A34A")
         self.assertEqual(set(GRADE_DISPLAY), {"안전", "주의", "위험"})
+        self.assertEqual(set(SEV_CHIP), {"높음", "중간", "낮음"})
 
 
 if __name__ == "__main__":

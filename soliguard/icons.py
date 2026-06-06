@@ -11,7 +11,7 @@ from pathlib import Path
 _ASSETS = Path(__file__).resolve().parent.parent / "assets"
 _BRAND = _ASSETS / "brand"
 
-CRIMSON = "#C8174E"
+CRIMSON = "#B0123F"
 
 __all__ = ["shield_pixmap", "app_icon", "logo_pixmap"]
 
