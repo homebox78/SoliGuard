@@ -10,11 +10,32 @@ from __future__ import annotations
 from .engine import PROFILE_ROLE  # 직무명(한국어) → 엔진 role
 
 __all__ = [
+    "ALL_PROFILES",
     "PROFILE_EXTENSIONS",
     "PROFILE_FOLDERS",
     "PROFILE_OCR_DEFAULT",
+    "PROFILE_DESC",
+    "PROFILE_ICON",
     "default_scan_config",
 ]
+
+#: 화면 표시 순서
+ALL_PROFILES = ["개발자", "디자이너", "기획자", "PM", "전산사무"]
+
+#: 직무별 한 줄 설명(직무 프로파일 카드용)
+PROFILE_DESC = {
+    "개발자": "소스코드·설정파일 속 API키·DB접속정보",
+    "디자이너": "시안·PSD 이미지 속 신분증·계약서(OCR)",
+    "기획자": "산출물 문서 속 실고객 샘플",
+    "PM": "프로젝트 문서·일정 산출물",
+    "전산사무": "명부·정산 엑셀 속 개인정보",
+}
+
+#: 직무별 아이콘(이모지)
+PROFILE_ICON = {
+    "개발자": "🧑‍💻", "디자이너": "🎨", "기획자": "📝",
+    "PM": "📋", "전산사무": "🗂",
+}
 
 # 직무별 우선 스캔 대상 확장자
 PROFILE_EXTENSIONS = {

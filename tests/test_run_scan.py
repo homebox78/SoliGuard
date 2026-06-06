@@ -42,6 +42,12 @@ class TestRunScan(unittest.TestCase):
         kinds = {f.info_type for f in s.all_findings()}
         self.assertNotIn("API 키/시크릿", kinds)
 
+    def test_multiple_profiles_union(self):
+        # 기획자(시크릿 제외) + 개발자(시크릿 포함) 복수 선택 → 합집합으로 시크릿 검출
+        s = run_scan([self.dir], profiles=["기획자", "개발자"])
+        kinds = {f.info_type for f in s.all_findings()}
+        self.assertIn("API 키/시크릿", kinds)
+
     def test_progress_and_stop(self):
         seen = []
         run_scan([self.dir], role="developer",

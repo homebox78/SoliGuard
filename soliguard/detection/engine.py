@@ -47,13 +47,15 @@ class DetectionEngine:
         self,
         detectors: Sequence[Detector] | None = None,
         role: str | None = None,
+        roles: Iterable[str] | None = None,
         enabled_types: Iterable[str] | None = None,
     ) -> None:
         """엔진 생성.
 
         :param detectors: 사용할 검출기 인스턴스(기본: DEFAULT_DETECTORS 전체)
-        :param role: 직무. 지정 시 해당 직무의 기본 검출기만 활성화한다.
-        :param enabled_types: 활성화할 검출기 name 집합(role보다 우선)
+        :param role: 단일 직무(하위호환). roles 와 합쳐진다.
+        :param roles: 복수 직무. 선택한 직무들의 검출기 '합집합'을 활성화한다.
+        :param enabled_types: 활성화할 검출기 name 집합(role/roles보다 우선)
         """
         if detectors is None:
             detectors = [cls() for cls in DEFAULT_DETECTORS]
@@ -61,20 +63,25 @@ class DetectionEngine:
         self._all: list[Detector] = list(detectors)
         self._rank = {d.name: i for i, d in enumerate(self._all)}
 
+        role_set: set[str] = set(roles or ())
+        if role:
+            role_set.add(role)
+
         if enabled_types is not None:
             wanted = set(enabled_types)
             self._active = [d for d in self._all if d.name in wanted]
-        elif role is not None:
-            self._active = [d for d in self._all if self._role_default(d, role)]
+        elif role_set:
+            self._active = [d for d in self._all if self._role_active(d, role_set)]
         else:
             self._active = list(self._all)
 
     @staticmethod
-    def _role_default(detector: Detector, role: str) -> bool:
-        """공통 검출기(default_roles 비어 있음)는 항상, 특화 검출기는 해당 직무만."""
+    def _role_active(detector: Detector, role_set: set[str]) -> bool:
+        """공통 검출기(default_roles 비어 있음)는 항상, 특화 검출기는 선택 직무 중
+        하나라도 일치하면 활성(복수 직무의 합집합)."""
         if not detector.default_roles:
             return True
-        return role in detector.default_roles
+        return bool(detector.default_roles & role_set)
 
     @property
     def active_detectors(self) -> list[str]:

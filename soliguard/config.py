@@ -37,7 +37,8 @@ class ScheduleConfig:
 
 @dataclass
 class AppConfig:
-    profile: str = "개발자"
+    profile: str = "개발자"                # 대표 직무(하위호환)
+    profiles: list[str] = field(default_factory=list)  # 복수 선택 직무
     target_folders: list[str] = field(default_factory=list)
     ocr_mode: str = "local"            # "local" | "off" | "cloud"(동의 시)
     exclude_folders: list[str] = field(default_factory=list)

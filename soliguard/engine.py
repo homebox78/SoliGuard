@@ -81,6 +81,8 @@ def run_scan(
     folders: list[str | Path],
     role: str | None = None,
     profile: str | None = None,
+    roles: "list[str] | None" = None,
+    profiles: "list[str] | None" = None,
     ocr_enabled: bool = True,
     excludes: set[str] | None = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
@@ -88,16 +90,23 @@ def run_scan(
 ) -> ScanSummary:
     """폴더(들)를 스캔해 집계 결과를 반환.
 
-    :param role: 엔진 role(developer 등). profile 보다 우선.
-    :param profile: 직무명(한국어, '개발자' 등). role 미지정 시 매핑에 사용.
+    직무는 복수 지정 가능하며, 선택한 직무들의 검출기 '합집합'으로 검사한다.
+
+    :param role/roles: 엔진 role(developer 등) 단일/복수.
+    :param profile/profiles: 직무명(한국어, '개발자' 등) 단일/복수 → role로 매핑.
     :param progress_cb: progress_cb(done, total, current_path) 진행 보고.
     :param should_stop: True 반환 시 중지(부분 결과 반환).
     """
-    if role is None and profile is not None:
-        role = PROFILE_ROLE.get(profile)
+    role_set: set[str] = set(roles or ())
+    if role:
+        role_set.add(role)
+    for p in list(profiles or []) + ([profile] if profile else []):
+        r = PROFILE_ROLE.get(p)
+        if r:
+            role_set.add(r)
     excludes = (excludes or set()) | DEFAULT_EXCLUDES
 
-    engine = DetectionEngine(role=role)
+    engine = DetectionEngine(roles=role_set or None)
     files = collect_files(folders, exclude=excludes)
     total = len(files)
 

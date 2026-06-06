@@ -25,6 +25,7 @@ from . import __version__ as _VERSION
 from . import fonts, icons
 
 from .engine import PROFILE_ROLE, run_scan
+from .profiles import ALL_PROFILES, PROFILE_DESC, PROFILE_ICON
 from .report import ReportError, generate_pdf_report
 from .theme import GRADE_DISPLAY, SEMANTIC, build_qss
 
@@ -37,10 +38,10 @@ class ScanWorker(QThread):
     progress = Signal(int, int, str)   # done, total, current_path
     finished_scan = Signal(object)     # engine.ScanSummary
 
-    def __init__(self, folders, role, ocr_enabled):
+    def __init__(self, folders, profiles, ocr_enabled):
         super().__init__()
         self.folders = folders
-        self.role = role
+        self.profiles = list(profiles)
         self.ocr_enabled = ocr_enabled
         self._stop = False
 
@@ -49,7 +50,7 @@ class ScanWorker(QThread):
 
     def run(self):
         summary = run_scan(
-            self.folders, role=self.role, ocr_enabled=self.ocr_enabled,
+            self.folders, profiles=self.profiles, ocr_enabled=self.ocr_enabled,
             progress_cb=lambda i, t, p: self.progress.emit(i, t, p),
             should_stop=lambda: self._stop,
         )
@@ -83,6 +84,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 820)
         self.cfg = cfg
         self.profile = getattr(cfg, "profile", None) or "개발자"
+        self.profiles = list(getattr(cfg, "profiles", None) or [self.profile])
         self.theme = getattr(cfg, "theme", None) or "light"
         self.worker: ScanWorker | None = None
         self.file_results: list = []
@@ -153,20 +155,18 @@ class MainWindow(QMainWindow):
 
         lay.addStretch()
 
-        # 직무 선택(하단)
-        role_lbl = QLabel("직무")
+        # 직무 프로파일(복수) 요약 + 변경
+        role_lbl = QLabel("직무 프로파일")
         role_lbl.setStyleSheet("font-size:12px; color:rgba(255,255,255,0.65); padding:0 24px;")
         lay.addWidget(role_lbl)
-        wrap = QWidget()
-        wl = QHBoxLayout(wrap)
-        wl.setContentsMargins(24, 4, 24, 4)
-        self.profile_box = QComboBox()
-        self.profile_box.addItems(list(PROFILE_ROLE.keys()))
-        if self.profile in PROFILE_ROLE:
-            self.profile_box.setCurrentText(self.profile)
-        self.profile_box.currentTextChanged.connect(self._on_profile_changed)
-        wl.addWidget(self.profile_box)
-        lay.addWidget(wrap)
+        self.profile_summary = QLabel(self._profiles_text())
+        self.profile_summary.setWordWrap(True)
+        self.profile_summary.setStyleSheet("color:white; font-weight:600; padding:0 24px 4px 24px;")
+        lay.addWidget(self.profile_summary)
+        change = QPushButton("직무 변경 ›")
+        change.setStyleSheet("font-size:12px;")
+        change.clicked.connect(lambda: self._nav_buttons["settings"].click())
+        lay.addWidget(change)
 
         trust = QLabel("로컬 전용 · 외부 전송 없음")
         trust.setStyleSheet("font-size:11px; color:rgba(255,255,255,0.55); padding:10px 24px 0 24px;")
@@ -419,6 +419,22 @@ class MainWindow(QMainWindow):
         lay.setSpacing(16)
         lay.addWidget(_h1("설정"))
 
+        # ── 직무 프로파일(복수 선택) ──
+        prof = _card()
+        pl = QVBoxLayout(prof)
+        pl.setContentsMargins(22, 18, 22, 12)
+        pl.setSpacing(8)
+        head = QLabel("직무 프로파일")
+        head.setStyleSheet("font-size:15px; font-weight:700;")
+        pl.addWidget(head)
+        ph = QLabel("여러 직무를 함께 선택할 수 있습니다. 선택한 모든 직무의 검출 항목을 적용합니다.")
+        ph.setStyleSheet("color:#7A6A70; font-size:12px;")
+        pl.addWidget(ph)
+        self._role_checks = {}
+        for role in ALL_PROFILES:
+            pl.addWidget(self._role_row(role))
+        lay.addWidget(prof)
+
         gen = _card()
         gl = QVBoxLayout(gen)
         gl.setContentsMargins(22, 18, 22, 18)
@@ -460,7 +476,8 @@ class MainWindow(QMainWindow):
             from .config import AppConfig, ScheduleConfig
 
             cfg = self.cfg or AppConfig.load()
-            cfg.profile = self.profile
+            cfg.profiles = list(self.profiles)
+            cfg.profile = self.profiles[0] if self.profiles else "개발자"
             cfg.ocr_mode = "local" if self.ocr_check.isChecked() else "off"
             enabled = self.freq_box.currentText() != "사용 안 함"
             freq = {"매일": "daily", "매주(월요일)": "weekly",
@@ -472,10 +489,55 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "설정 저장 실패", str(e))
 
-    # ------------------------------------------------------------------ 동작
-    def _on_profile_changed(self, text: str):
-        self.profile = text
+    # ------------------------------------------------------------------ 직무(복수)
+    def _role_row(self, role: str) -> QFrame:
+        row = QFrame()
+        row.setObjectName("RoleRow")
+        row.setStyleSheet(
+            "QFrame#RoleRow{background:#FFFFFF;border:1px solid #E7DCE0;"
+            "border-radius:10px;} QFrame#RoleRow:hover{border-color:#E6A3BC;}")
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(14, 10, 14, 10)
+        icon = QLabel(PROFILE_ICON.get(role, "•"))
+        icon.setStyleSheet("font-size:20px;")
+        rl.addWidget(icon)
+        col = QVBoxLayout()
+        col.setSpacing(1)
+        name = QLabel(role)
+        name.setStyleSheet("font-weight:700; font-size:14px;")
+        col.addWidget(name)
+        desc = QLabel(PROFILE_DESC.get(role, ""))
+        desc.setStyleSheet("color:#7A6A70; font-size:12px;")
+        col.addWidget(desc)
+        rl.addLayout(col)
+        rl.addStretch()
+        chk = QCheckBox()
+        chk.setChecked(role in self.profiles)
+        chk.toggled.connect(self._on_role_toggled)
+        self._role_checks[role] = chk
+        rl.addWidget(chk)
+        return row
 
+    def _on_role_toggled(self, _checked: bool):
+        selected = [r for r in ALL_PROFILES
+                    if self._role_checks[r].isChecked()]
+        if not selected:  # 최소 1개 유지
+            for r, c in self._role_checks.items():
+                if c is self.sender():
+                    c.blockSignals(True)
+                    c.setChecked(True)
+                    c.blockSignals(False)
+                    selected = [r]
+                    break
+        self.profiles = selected
+        self.profile = selected[0] if selected else "개발자"
+        if hasattr(self, "profile_summary"):
+            self.profile_summary.setText(self._profiles_text())
+
+    def _profiles_text(self) -> str:
+        return ", ".join(self.profiles) if self.profiles else "(선택 없음)"
+
+    # ------------------------------------------------------------------ 동작
     def start_scan(self):
         folder = QFileDialog.getExistingDirectory(self, "스캔할 폴더 선택")
         if not folder:
@@ -485,7 +547,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         ocr = getattr(self, "ocr_check", None)
         ocr_enabled = ocr.isChecked() if ocr else True
-        self.worker = ScanWorker([Path(folder)], PROFILE_ROLE.get(self.profile), ocr_enabled)
+        self.worker = ScanWorker([Path(folder)], list(self.profiles), ocr_enabled)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_scan.connect(self._on_finished)
         self.worker.start()
