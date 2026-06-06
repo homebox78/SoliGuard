@@ -1,81 +1,74 @@
-"""최초 실행 온보딩 - SolManager급 커스텀 디자인(스텝 인디케이터 + 카드).
+"""최초 실행 온보딩 - 정본(docs/app install) 5단계 플로우.
 
-기본 QWizard 대신, 브랜드 카드 + 단계 표시 + 크림슨 버튼으로 구성한 다이얼로그.
-완료 시 completed(AppConfig) 시그널을 emit 한다(app.py 가 수신).
+환영 → 직무 선택(복수) → 스캔 폴더 → 자동 점검 → 이미지 검사.
+상단 진행 점(progress dots) + 카드 디자인. 완료 시 completed(AppConfig) emit.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QGraphicsDropShadowEffect,
-    QGridLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout,
-    QWidget,
+    QApplication, QButtonGroup, QCheckBox, QDialog, QFrame,
+    QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QPushButton,
+    QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from . import fonts, icons
 from .config import AppConfig, ScheduleConfig
+from .profiles import ALL_PROFILES, PROFILE_DESC, PROFILE_FOLDERS, PROFILE_ICON
 
-ROLES = [("개발자", "💻"), ("디자이너", "🎨"), ("기획자", "📝"),
-         ("PM", "📋"), ("전산사무", "🗂")]
-_FREQ_MAP = {
-    "사용 안 함": (False, "weekly"), "매일": (True, "daily"),
-    "매주(월요일)": (True, "weekly"), "매월(1일)": (True, "monthly"),
-}
-_STEPS = ["직무", "점검 설정"]
+_STEPS = ["환영", "직무", "스캔 폴더", "자동 점검", "이미지 검사"]
+_SCHED = [("off", "사용 안 함"), ("daily", "매일 09:00"),
+          ("weekly", "매주 (월요일) 09:00"), ("monthly", "매월 1일 09:00")]
 
 _QSS = """
 * { font-family: 'Pretendard'; }
 #Backdrop { background: #F3F4F7; }
-#Card { background: #FFFFFF; border-radius: 18px; }
-#Brand { font-size: 17px; }
-#Pill {
-    background: #FCEFF3; color: #B0123F; border-radius: 11px;
-    padding: 4px 12px; font-size: 12px; font-weight: 700;
-}
-#IconBadge { background: #B0123F; border-radius: 13px; color: white; font-size: 22px; }
-#Title { font-size: 21px; font-weight: 800; color: #14161C; }
+#Card { background: #FFFFFF; border: 1px solid #E7E9EE; border-radius: 16px; }
+#Title { font-size: 22px; font-weight: 800; color: #14161C; }
 #Sub { color: #565E6C; font-size: 13px; }
-#SectionLabel { font-size: 13px; font-weight: 700; color: #14161C; }
-#Trust {
-    background: #FCEFF3; border: 1px solid #F6D2DE; border-radius: 10px;
-    color: #5E0A24; font-size: 12px;
-}
-#StepNumActive {
-    background: #B0123F; color: white; border-radius: 14px; font-weight: 700;
-}
-#StepNumIdle { background: #E7E9EE; color: #8B92A0; border-radius: 14px; font-weight: 700; }
-#StepTextActive { color: #14161C; font-weight: 700; font-size: 13px; }
-#StepTextIdle { color: #8B92A0; font-size: 13px; }
-#Connector { background: #E7E9EE; }
-QPushButton#Primary {
-    background: #B0123F; color: white; border: none; border-radius: 9px;
-    min-height: 42px; padding: 0 24px; font-size: 14px; font-weight: 700;
-}
+#Pill { background: #FCEFF3; color: #B0123F; border-radius: 11px; padding: 4px 12px; font-size: 12px; font-weight: 700; }
+#DotActive { background: #B0123F; color: white; border-radius: 12px; font-weight: 700; font-size: 11px; }
+#DotIdle { background: #EFF1F4; color: #8B92A0; border-radius: 12px; font-weight: 700; font-size: 11px; }
+#StepLabel { color: #B0123F; font-weight: 700; font-size: 12.5px; }
+#Conn { background: #E7E9EE; }
+#Trust { background: #FCEFF3; border: 1px solid #F6D2DE; border-radius: 10px; color: #5E0A24; font-size: 12px; }
+QPushButton#Primary { background: #B0123F; color: white; border: none; border-radius: 10px;
+    min-height: 42px; padding: 0 22px; font-size: 14px; font-weight: 700; }
 QPushButton#Primary:hover { background: #C7164A; }
 QPushButton#Primary:pressed { background: #930E33; }
-QPushButton#Ghost {
-    background: transparent; color: #565E6C; border: 1px solid #E7E9EE;
-    border-radius: 9px; min-height: 42px; padding: 0 18px; font-size: 14px;
-}
+QPushButton#Ghost { background: #FFFFFF; color: #14161C; border: 1px solid #D6DAE2;
+    border-radius: 10px; min-height: 42px; padding: 0 18px; font-size: 13.5px; font-weight: 700; }
 QPushButton#Ghost:hover { background: #F7F8FA; }
-QPushButton#RoleCard {
-    background: #FFFFFF; border: 1px solid #E7E9EE; border-radius: 12px;
-    color: #14161C; font-size: 14px; font-weight: 600; text-align: center;
-}
-QPushButton#RoleCard:hover { border-color: #EEB6C8; }
-QPushButton#RoleCard:checked { border: 2px solid #B0123F; background: #FCEFF3; }
-QComboBox {
-    background: #FFFFFF; border: 1px solid #E7E9EE; border-radius: 8px;
-    padding: 8px 12px; color: #14161C; min-height: 20px;
-}
-QComboBox QAbstractItemView {
-    background: white; color: #14161C; selection-background-color: #B0123F;
-    selection-color: white; outline: 0;
-}
-QCheckBox { color: #14161C; font-size: 13px; }
+QPushButton#ChkCard { background: #FFFFFF; border: 1px solid #E7E9EE; border-radius: 12px;
+    color: #14161C; font-size: 13.5px; font-weight: 600; text-align: left; padding: 12px 14px; }
+QPushButton#ChkCard:hover { border-color: #EEB6C8; }
+QPushButton#ChkCard:checked { border: 2px solid #B0123F; background: #FCEFF3; color: #B0123F; }
+QLabel { background: transparent; }
 """
+
+
+def _promise_card(icon_txt, title, desc) -> QFrame:
+    f = QFrame()
+    f.setObjectName("Card")
+    v = QVBoxLayout(f)
+    v.setContentsMargins(16, 14, 16, 14)
+    badge = QLabel(icon_txt)
+    badge.setFixedSize(34, 34)
+    badge.setAlignment(Qt.AlignCenter)
+    badge.setStyleSheet("background:#FCEFF3; color:#B0123F; border-radius:10px; font-size:17px;")
+    v.addWidget(badge)
+    t = QLabel(title)
+    t.setStyleSheet("font-weight:700; font-size:13.5px;")
+    v.addWidget(t)
+    d = QLabel(desc)
+    d.setWordWrap(True)
+    d.setStyleSheet("color:#565E6C; font-size:11.5px;")
+    v.addWidget(d)
+    return f
 
 
 class OnboardingWizard(QDialog):
@@ -83,43 +76,43 @@ class OnboardingWizard(QDialog):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SoliGuard 초기 설정")
+        self.setWindowTitle("솔리가드 — 초기 설정")
         self.setObjectName("Backdrop")
         self.setMinimumSize(680, 600)
         self.setStyleSheet(_QSS)
-        from PySide6.QtGui import QFont
-        from PySide6.QtWidgets import QApplication
-
         fam = fonts.load_fonts(QApplication.instance())
         self.setFont(QFont(fam, 10))
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(40, 36, 40, 36)
+        self.roles = ["개발자"]
+        self.sched = "weekly"
+        self.ocr = True
+        self._folder_checks = []
 
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(40, 34, 40, 34)
         card = QFrame()
         card.setObjectName("Card")
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(40)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(80, 10, 30, 60))
-        card.setGraphicsEffect(shadow)
+        sh = QGraphicsDropShadowEffect(self)
+        sh.setBlurRadius(40)
+        sh.setOffset(0, 8)
+        sh.setColor(QColor(80, 10, 30, 55))
+        card.setGraphicsEffect(sh)
         outer.addWidget(card)
 
         c = QVBoxLayout(card)
-        c.setContentsMargins(40, 32, 40, 28)
-        c.setSpacing(18)
+        c.setContentsMargins(34, 26, 34, 22)
+        c.setSpacing(14)
 
-        # ── 상단: 브랜드 + 배지 ──
+        # 상단: 브랜드 + 배지
         top = QHBoxLayout()
-        logo_pix = icons.logo_pixmap(26, white=False)
+        logo_pix = icons.logo_pixmap(24, white=False)
         if logo_pix is not None:
             brand = QLabel()
             brand.setPixmap(logo_pix)
         else:
-            brand = QLabel(
-                '<span style="color:#14161C;font-weight:800;">solideo</span>'
-                '<span style="color:#B0123F;font-weight:800;">S.</span>')
-            brand.setObjectName("Brand")
+            brand = QLabel('<span style="color:#14161C;font-weight:800;">solideo</span>'
+                           '<span style="color:#B0123F;font-weight:800;">S.</span>')
+            brand.setStyleSheet("font-size:16px;")
         top.addWidget(brand)
         top.addStretch()
         pill = QLabel("SoliGuard · 초기 설정")
@@ -127,44 +120,20 @@ class OnboardingWizard(QDialog):
         top.addWidget(pill)
         c.addLayout(top)
 
-        # ── 아이콘 + 제목 ──
-        title_row = QHBoxLayout()
-        title_row.setSpacing(14)
-        badge = QLabel()
-        badge.setFixedSize(52, 52)
-        badge.setPixmap(icons.shield_pixmap(52, stroke=3, color="#FFFFFF", bg="#B0123F"))
-        badge.setAlignment(Qt.AlignCenter)
-        title_row.addWidget(badge)
-        tcol = QVBoxLayout()
-        tcol.setSpacing(2)
-        title = QLabel("SoliGuard에 오신 것을 환영합니다")
-        title.setObjectName("Title")
-        tcol.addWidget(title)
-        sub = QLabel("처음 한 번만 설정하면 됩니다. 입력값은 이 PC에만 저장됩니다.")
-        sub.setObjectName("Sub")
-        tcol.addWidget(sub)
-        title_row.addLayout(tcol)
-        title_row.addStretch()
-        c.addLayout(title_row)
+        # 진행 점
+        c.addLayout(self._build_dots())
 
-        # ── 스텝 인디케이터 ──
-        c.addLayout(self._build_steps())
-
-        # ── 페이지 ──
+        # 페이지
         self.pages = QStackedWidget()
-        self.pages.addWidget(self._page_role())
+        self.pages.addWidget(self._page_welcome())
+        self.pages.addWidget(self._page_roles())
+        self.folder_page = self._page_folders()
+        self.pages.addWidget(self.folder_page)
         self.pages.addWidget(self._page_schedule())
+        self.pages.addWidget(self._page_ocr())
         c.addWidget(self.pages, 1)
 
-        # ── 신뢰 박스 ──
-        trust = QLabel("이 도구는 외부로 어떤 정보도 전송하지 않습니다. "
-                       "모든 데이터는 이 PC의 로컬 저장소에만 보관됩니다.")
-        trust.setObjectName("Trust")
-        trust.setWordWrap(True)
-        trust.setContentsMargins(14, 12, 14, 12)
-        c.addWidget(trust)
-
-        # ── 하단 버튼 ──
+        # 하단 버튼
         nav = QHBoxLayout()
         self.back_btn = QPushButton("‹ 이전")
         self.back_btn.setObjectName("Ghost")
@@ -180,92 +149,190 @@ class OnboardingWizard(QDialog):
         self._index = 0
         self._sync()
 
-    # ---- 스텝 인디케이터 ----
-    def _build_steps(self) -> QHBoxLayout:
+    # ---- 진행 점 ----
+    def _build_dots(self) -> QHBoxLayout:
         lay = QHBoxLayout()
-        lay.setSpacing(8)
-        self._step_nums, self._step_texts = [], []
+        lay.setSpacing(7)
+        self._dots, self._labels, self._conns = [], [], []
         for i, name in enumerate(_STEPS):
             num = QLabel(str(i + 1))
-            num.setFixedSize(28, 28)
+            num.setFixedSize(24, 24)
             num.setAlignment(Qt.AlignCenter)
-            self._step_nums.append(num)
+            self._dots.append(num)
             lay.addWidget(num)
-            txt = QLabel(name)
-            self._step_texts.append(txt)
-            lay.addWidget(txt)
+            lbl = QLabel(name)
+            lbl.setObjectName("StepLabel")
+            self._labels.append(lbl)
+            lay.addWidget(lbl)
             if i < len(_STEPS) - 1:
                 conn = QFrame()
-                conn.setObjectName("Connector")
-                conn.setFixedSize(40, 2)
-                lay.addWidget(conn)
-        lay.addStretch()
+                conn.setObjectName("Conn")
+                conn.setFixedHeight(2)
+                conn.setMinimumWidth(16)
+                self._conns.append(conn)
+                lay.addWidget(conn, 1)
         return lay
 
-    def _sync_steps(self):
-        for i, (num, txt) in enumerate(zip(self._step_nums, self._step_texts)):
-            active = i == self._index
-            num.setObjectName("StepNumActive" if active else "StepNumIdle")
-            txt.setObjectName("StepTextActive" if active else "StepTextIdle")
-            for wgt in (num, txt):
-                wgt.style().unpolish(wgt)
-                wgt.style().polish(wgt)
+    def _sync_dots(self):
+        for i, (num, lbl) in enumerate(zip(self._dots, self._labels)):
+            num.setObjectName("DotActive" if i <= self._index else "DotIdle")
+            num.setText("✓" if i < self._index else str(i + 1))
+            lbl.setVisible(i == self._index)
+            num.style().unpolish(num); num.style().polish(num)
 
-    # ---- 페이지 1: 직무 ----
-    def _page_role(self) -> QWidget:
+    # ---- 페이지 1: 환영 ----
+    def _page_welcome(self) -> QWidget:
         w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(0, 6, 0, 0)
-        lbl = QLabel("어떤 업무를 하시나요?")
-        lbl.setObjectName("SectionLabel")
-        lay.addWidget(lbl)
-        hint = QLabel("선택한 직무에 맞춰 점검 항목과 추천 폴더가 자동 구성됩니다.")
-        hint.setObjectName("Sub")
-        lay.addWidget(hint)
-
-        grid = QGridLayout()
-        grid.setSpacing(10)
-        self.role_group = QButtonGroup(self)
-        for i, (role, icon) in enumerate(ROLES):
-            b = QPushButton(f"{icon}\n{role}")
-            b.setObjectName("RoleCard")
-            b.setCheckable(True)
-            b.setMinimumHeight(76)
-            if i == 0:
-                b.setChecked(True)
-            self.role_group.addButton(b, i)
-            grid.addWidget(b, i // 3, i % 3)
-        lay.addLayout(grid)
-        lay.addStretch()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        v.setAlignment(Qt.AlignTop)
+        badge = QLabel()
+        badge.setFixedSize(60, 60)
+        badge.setPixmap(icons.shield_pixmap(60, stroke=3, color="#FFFFFF", bg="#B0123F"))
+        badge.setAlignment(Qt.AlignCenter)
+        h = QHBoxLayout(); h.addStretch(); h.addWidget(badge); h.addStretch()
+        v.addLayout(h)
+        t = QLabel("내 PC의 고객 데이터, 먼저 찾습니다")
+        t.setObjectName("Title"); t.setAlignment(Qt.AlignCenter)
+        v.addWidget(t)
+        s = QLabel("프로젝트가 끝나면, 데이터도 깨끗하게 — 솔리가드")
+        s.setObjectName("Sub"); s.setAlignment(Qt.AlignCenter)
+        v.addWidget(s)
+        grid = QHBoxLayout()
+        grid.setSpacing(12)
+        grid.addWidget(_promise_card("🛡", "로컬 처리", "모든 데이터는 이 PC 안에서만 처리되고 외부로 전송되지 않습니다"))
+        grid.addWidget(_promise_card("✓", "정확한 검출", "체크섬·Luhn·엔트로피 2단계 검증으로 오탐을 줄입니다"))
+        grid.addWidget(_promise_card("📄", "법규 증빙", "발주처 보안 감사·개인정보보호법 대응 리포트를 발급합니다"))
+        v.addSpacing(8)
+        v.addLayout(grid)
+        v.addStretch()
         return w
 
-    def selected_profile(self) -> str:
-        return ROLES[max(0, self.role_group.checkedId())][0]
+    # ---- 페이지 2: 직무(복수) ----
+    def _page_roles(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        h2 = QLabel("어떤 업무를 하시나요?")
+        h2.setStyleSheet("font-size:18px; font-weight:800;")
+        v.addWidget(h2)
+        sub = QLabel("선택한 직무에 맞춰 점검 항목을 구성합니다. 복수 선택할 수 있어요.")
+        sub.setObjectName("Sub")
+        v.addWidget(sub)
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        self._role_checks = {}
+        for i, role in enumerate(ALL_PROFILES):
+            b = QPushButton(f"  {PROFILE_ICON.get(role,'•')}  {role}\n      {PROFILE_DESC.get(role,'')}")
+            b.setObjectName("ChkCard")
+            b.setCheckable(True)
+            b.setMinimumHeight(64)
+            b.setChecked(role in self.roles)
+            b.toggled.connect(self._on_role_toggle)
+            self._role_checks[role] = b
+            grid.addWidget(b, i // 2, i % 2)
+        v.addLayout(grid)
+        v.addStretch()
+        return w
 
-    # ---- 페이지 2: 점검 설정 ----
+    def _on_role_toggle(self, _c):
+        sel = [r for r in ALL_PROFILES if self._role_checks[r].isChecked()]
+        if not sel:  # 최소 1개
+            s = self.sender()
+            s.blockSignals(True); s.setChecked(True); s.blockSignals(False)
+            sel = [r for r in ALL_PROFILES if self._role_checks[r].isChecked()]
+        self.roles = sel
+
+    # ---- 페이지 3: 스캔 폴더 ----
+    def _page_folders(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        h2 = QLabel("스캔할 폴더를 확인하세요")
+        h2.setStyleSheet("font-size:18px; font-weight:800;")
+        v.addWidget(h2)
+        self.folder_sub = QLabel("직무에 맞춰 추천 폴더가 미리 선택돼 있어요.")
+        self.folder_sub.setObjectName("Sub")
+        v.addWidget(self.folder_sub)
+        self.folder_box = QVBoxLayout()
+        self.folder_box.setSpacing(8)
+        v.addLayout(self.folder_box)
+        v.addStretch()
+        return w
+
+    def _refresh_folders(self):
+        # 기존 제거
+        while self.folder_box.count():
+            it = self.folder_box.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        self._folder_checks = []
+        names, seen = [], set()
+        for role in self.roles:
+            for n in PROFILE_FOLDERS.get(role, []):
+                if n not in seen:
+                    seen.add(n); names.append(n)
+        home = Path.home()
+        for n in names:
+            p = home / n
+            b = QPushButton(f"  📁  {p}")
+            b.setObjectName("ChkCard")
+            b.setCheckable(True)
+            b.setChecked(p.exists())
+            self.folder_box.addWidget(b)
+            self._folder_checks.append((b, str(p)))
+        self.folder_sub.setText(f"직무 “{', '.join(self.roles)}”에 맞춰 추천 폴더가 미리 선택돼 있어요.")
+
+    # ---- 페이지 4: 자동 점검 ----
     def _page_schedule(self) -> QWidget:
         w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(0, 6, 0, 0)
-        lay.setSpacing(10)
-        lbl = QLabel("자동 점검 주기")
-        lbl.setObjectName("SectionLabel")
-        lay.addWidget(lbl)
-        self.freq = QComboBox()
-        self.freq.addItems(list(_FREQ_MAP.keys()))
-        self.freq.setCurrentText("매주(월요일)")
-        lay.addWidget(self.freq)
-        self.ocr = QCheckBox("이미지 속 신분증·계약서도 검사합니다 (로컬 OCR)")
-        self.ocr.setChecked(True)
-        lay.addWidget(self.ocr)
-        self.designer_hint = QLabel(
-            "💡 디자이너 팁: PSD·XD는 자동 검사됩니다. Figma 검사는 "
-            "설정에서 동의 후 사용할 수 있습니다.")
-        self.designer_hint.setObjectName("Sub")
-        self.designer_hint.setWordWrap(True)
-        self.designer_hint.setVisible(False)
-        lay.addWidget(self.designer_hint)
-        lay.addStretch()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        h2 = QLabel("자동 점검 주기를 설정하세요")
+        h2.setStyleSheet("font-size:18px; font-weight:800;")
+        v.addWidget(h2)
+        sub = QLabel("정해진 주기에 백그라운드에서 자동으로 PC를 점검합니다.")
+        sub.setObjectName("Sub")
+        v.addWidget(sub)
+        self._sched_group = QButtonGroup(self)
+        for key, label in _SCHED:
+            text = f"  ⏰  {label}" + ("    (권장)" if key == "weekly" else "")
+            b = QPushButton(text)
+            b.setObjectName("ChkCard")
+            b.setCheckable(True)
+            b.setChecked(key == self.sched)
+            b.clicked.connect(lambda _=False, k=key: setattr(self, "sched", k))
+            self._sched_group.addButton(b)
+            v.addWidget(b)
+        v.addStretch()
+        return w
+
+    # ---- 페이지 5: 이미지 검사 ----
+    def _page_ocr(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(10)
+        h2 = QLabel("이미지 속 정보도 검사할까요?")
+        h2.setStyleSheet("font-size:18px; font-weight:800;")
+        v.addWidget(h2)
+        sub = QLabel("시안·스캔본 이미지 속 신분증·계약서를 OCR로 검출합니다.")
+        sub.setObjectName("Sub")
+        v.addWidget(sub)
+        self.ocr_btn = QPushButton(
+            "  🖼   이미지 속 신분증·계약서 검사 (로컬 OCR)\n        이미지는 PC를 벗어나지 않고 로컬에서 분석됩니다")
+        self.ocr_btn.setObjectName("ChkCard")
+        self.ocr_btn.setCheckable(True)
+        self.ocr_btn.setChecked(self.ocr)
+        self.ocr_btn.setMinimumHeight(64)
+        self.ocr_btn.toggled.connect(lambda v: setattr(self, "ocr", v))
+        v.addWidget(self.ocr_btn)
+        trust = QLabel("외부 OCR API는 이미지가 PC를 벗어나므로 기본 비활성입니다. "
+                       "필요 시 설정에서 명시적 동의 후에만 켤 수 있습니다.")
+        trust.setObjectName("Trust")
+        trust.setWordWrap(True)
+        trust.setContentsMargins(14, 12, 14, 12)
+        v.addWidget(trust)
+        v.addStretch()
         return w
 
     # ---- 네비게이션 ----
@@ -273,10 +340,10 @@ class OnboardingWizard(QDialog):
         self.pages.setCurrentIndex(self._index)
         self.back_btn.setVisible(self._index > 0)
         last = self._index == len(_STEPS) - 1
-        self.next_btn.setText("시작하기" if last else "다음 ›")
-        if self._index == 1:
-            self.designer_hint.setVisible(self.selected_profile() == "디자이너")
-        self._sync_steps()
+        self.next_btn.setText("🔍  지금 첫 점검 시작" if last else "다음 ›")
+        if self._index == 2:
+            self._refresh_folders()
+        self._sync_dots()
 
     def _next(self):
         if self._index < len(_STEPS) - 1:
@@ -292,11 +359,16 @@ class OnboardingWizard(QDialog):
 
     def _finish(self):
         cfg = AppConfig.load()
-        cfg.profile = self.selected_profile()
-        enabled, freq = _FREQ_MAP[self.freq.currentText()]
+        cfg.profiles = list(self.roles)
+        cfg.profile = self.roles[0]
+        folders = [p for b, p in self._folder_checks if b.isChecked()]
+        if folders:
+            cfg.target_folders = folders
+        enabled = self.sched != "off"
         cfg.schedule = ScheduleConfig(
-            enabled=enabled, frequency=freq, day_of_week="mon", hour=9, minute=0)
-        cfg.ocr_mode = "local" if self.ocr.isChecked() else "off"
+            enabled=enabled, frequency=(self.sched if enabled else "weekly"),
+            day_of_week="mon", hour=9, minute=0)
+        cfg.ocr_mode = "local" if self.ocr else "off"
         cfg.save()
         self.completed.emit(cfg)
         self.accept()

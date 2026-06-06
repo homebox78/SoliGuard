@@ -4,10 +4,6 @@
 
 const SCANNED_BY_SCOPE = { full: 2050, quick: 642, closing: 1180 };
 
-function makeSummary(role, scope) {
-  return { rows: flattenFindings(DATASETS[role]), when: '3일 전', scanned: 1284 };
-}
-
 function initState() {
   let roles = ['개발자'];
   let onboard = null;

@@ -100,7 +100,7 @@ function NumericHero({ counts, total, grade, animate }) {
 }
 
 function Dashboard({ state, dispatch }) {
-  const { role, lastSummary, heroStyle, scanFresh, nextScan, activity } = state;
+  const { roles, lastSummary, heroStyle, scanFresh, nextScan, activity } = state;
   const rows = lastSummary ? lastSummary.rows : [];
   const counts = countBySeverity(rows);
   const total = rows.length;
@@ -163,7 +163,7 @@ function Dashboard({ state, dispatch }) {
 
           <div style={{ display: 'flex', gap: 14, marginTop: 18, flexWrap: 'wrap' }}>
             <MiniStat icon="clock" label="다음 자동 점검" value={nextScan} />
-            <MiniStat icon="folder" label="점검 직무" value={role} />
+            <MiniStat icon="folder" label="점검 직무" value={rolesLabel(roles)} />
             <MiniStat icon="archive" label="격리 보관" value={`${state.quarantine.length}개`} />
           </div>
         </div>

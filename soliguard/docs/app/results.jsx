@@ -39,8 +39,8 @@ function RowActions({ r, onAct, compact }) {
 }
 
 function Results({ state, dispatch }) {
-  const role = state.role;
-  const initial = React.useMemo(() => flattenFindings(DATASETS[role]).map(r => ({ ...r, uid: r.id, status: 'idle' })), [role]);
+  const roles = state.roles;
+  const initial = React.useMemo(() => flattenFindings(mergeDataset(roles)).map(r => ({ ...r, uid: r.id, status: 'idle' })), [roles]);
   const [rows, setRows] = React.useState(initial);
   const [resolved, setResolved] = React.useState({ masked: 0, quarantined: 0, deleted: 0 });
   const [sel, setSel] = React.useState(() => new Set());
@@ -115,7 +115,7 @@ function Results({ state, dispatch }) {
             </div>
           </div>
           <Segmented value={layout} options={layoutOpts} onChange={setLayout} />
-          <button className="btn btn-primary" onClick={() => dispatch({ type: 'goComplete', payload: { resolved, discovered, role, remaining: rows } })}>
+          <button className="btn btn-primary" onClick={() => dispatch({ type: 'goComplete', payload: { resolved, discovered, roles, remaining: rows } })}>
             <Icon name="checkCircle" size={17} /> 완료 · 리포트
           </button>
         </div>

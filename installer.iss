@@ -10,6 +10,12 @@ OutputBaseFilename=SoliGuard_Setup
 SetupIconFile=assets\soliguard.ico
 Compression=lzma2
 PrivilegesRequired=admin
+; 브랜드 배너(크림슨 + 방패) — 정본 설치 디자인
+WizardStyle=modern
+WizardImageFile=assets\installer_banner.bmp
+WizardSmallImageFile=assets\installer_small.bmp
+WizardImageStretch=yes
+AppPublisherURL=https://github.com/homebox78/SoliGuard
 
 [Files]
 Source: "dist\SoliGuard\*"; DestDir: "{app}"; Flags: recursesubdirs

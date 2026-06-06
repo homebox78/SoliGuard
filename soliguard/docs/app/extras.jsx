@@ -83,7 +83,7 @@ function History({ state, dispatch }) {
 
 function Settings({ state, dispatch }) {
   const [tab, setTab] = React.useState('general');
-  const [ocr, setOcr] = React.useState(ROLE_CONFIG[state.role].ocr);
+  const [ocr, setOcr] = React.useState(mergeConfig(state.roles).ocr);
   const [sched, setSched] = React.useState('weekly');
   const [autoLevel, setAutoLevel] = React.useState('report');
   const tabs = [
@@ -108,7 +108,7 @@ function Settings({ state, dispatch }) {
           {tab === 'general' && <SettingsCard>
             <Row label="직무 프로파일" desc="선택한 직무에 맞춰 스캔 폴더·검출 항목이 구성됩니다">
               <button className="btn btn-ghost btn-sm" onClick={() => dispatch({ type: 'openRole' })}>
-                <Icon name={ROLES.find(r => r.id === state.role).icon} size={15} /> {state.role} <Icon name="chevD" size={14} />
+                <Icon name={rolesIcon(state.roles)} size={15} /> {rolesLabel(state.roles)} <Icon name="chevD" size={14} />
               </button>
             </Row>
             <Row label="테마" desc="야간 작업이 많다면 다크 모드를 권장합니다">
@@ -118,14 +118,14 @@ function Settings({ state, dispatch }) {
           </SettingsCard>}
 
           {tab === 'scan' && <SettingsCard>
-            <Row label="기본 스캔 폴더" desc={ROLE_CONFIG[state.role].folders.join('  ·  ')}><span /></Row>
+            <Row label="기본 스캔 폴더" desc={mergeConfig(state.roles).folders.join('  ·  ')}><span /></Row>
             <Row label="이미지 OCR 검사" desc="이미지 속 신분증·계약서를 로컬에서 분석합니다">
               <Toggle on={ocr} onClick={() => setOcr(!ocr)} />
             </Row>
             <Row label="OCR 처리 방식" desc="외부 API는 이미지가 PC를 벗어나므로 기본 비활성입니다">
               <Segmented value="local" options={[{ value: 'local', label: '로컬(기본)' }, { value: 'cloud', label: '외부 API' }]} onChange={() => dispatch({ type: 'toast', toast: { icon: 'shield', tone: 'var(--brand)', msg: '외부 OCR은 명시적 동의가 필요합니다 — 기본은 로컬 처리입니다' } })} />
             </Row>
-            <Row label="파일 형식" desc=""><span className="mono" style={{ fontSize: 12, color: 'var(--text-2)' }}>{ROLE_CONFIG[state.role].exts}</span></Row>
+            <Row label="파일 형식" desc=""><span className="mono" style={{ fontSize: 12, color: 'var(--text-2)' }}>{mergeConfig(state.roles).exts}</span></Row>
           </SettingsCard>}
 
           {tab === 'auto' && <SettingsCard>
@@ -155,7 +155,7 @@ function Settings({ state, dispatch }) {
           </SettingsCard>}
 
           {tab === 'about' && <SettingsCard>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
               <div className="sb-logo" style={{ width: 46, height: 46, borderRadius: 12 }}><Icon name="shieldCheck" size={24} stroke={2.2} /></div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 17 }}>솔리가드 <span style={{ color: 'var(--brand)' }}>SoliGuard</span></div>

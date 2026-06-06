@@ -83,7 +83,7 @@ function ReportModal({ state, d, onClose, dispatch }) {
   const now = new Date();
   const fmt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   // reconstruct detail from original dataset (masked)
-  const dataset = DATASETS[state.role];
+  const dataset = mergeDataset(state.roles);
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ width: 560, maxHeight: '88%', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
@@ -104,7 +104,7 @@ function ReportModal({ state, d, onClose, dispatch }) {
             <div style={{ padding: '18px 22px' }}>
               <table style={{ width: '100%', fontSize: 12, color: 'var(--text-2)', borderCollapse: 'collapse', marginBottom: 14 }}>
                 <tbody>
-                  <tr><td style={{ padding: '3px 0', width: 90, color: 'var(--text-3)' }}>점검 일시</td><td>{fmt}</td><td style={{ width: 90, color: 'var(--text-3)' }}>직무 프로파일</td><td>{state.role}</td></tr>
+                  <tr><td style={{ padding: '3px 0', width: 90, color: 'var(--text-3)' }}>점검 일시</td><td>{fmt}</td><td style={{ width: 90, color: 'var(--text-3)' }}>직무 프로파일</td><td>{rolesLabel(state.roles)}</td></tr>
                   <tr><td style={{ color: 'var(--text-3)' }}>검사 파일</td><td>{(d.scanned || 0).toLocaleString()}개</td><td style={{ color: 'var(--text-3)' }}>처리 건수</td><td>{d.handled}건</td></tr>
                 </tbody>
               </table>
