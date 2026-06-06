@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec.bak
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# 테스트/커버리지
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# SoliGuard 런타임 산출물(로컬 전용, 절대 커밋 금지)
+.soliguard/
+*.enc
+audit.log
+agent.log
+report_*.pdf
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
