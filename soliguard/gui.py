@@ -13,13 +13,15 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFrame,
-    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QMainWindow, QMessageBox,
-    QProgressBar, QPushButton, QStackedWidget, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QGraphicsDropShadowEffect, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
+    QMainWindow, QMessageBox, QProgressBar, QPushButton, QStackedWidget,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
+
+from . import __version__ as _VERSION
 
 from .engine import PROFILE_ROLE, run_scan
 from .report import ReportError, generate_pdf_report
@@ -62,6 +64,11 @@ def _h1(text: str) -> QLabel:
 def _card() -> QFrame:
     f = QFrame()
     f.setObjectName("Card")
+    eff = QGraphicsDropShadowEffect(f)
+    eff.setBlurRadius(24)
+    eff.setOffset(0, 4)
+    eff.setColor(QColor(80, 10, 30, 28))
+    f.setGraphicsEffect(eff)
     return f
 
 
@@ -109,11 +116,16 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(0, 20, 0, 16)
         lay.setSpacing(2)
 
-        # 로고 락업
-        logo = QLabel("🛡  SoliGuard")
-        logo.setStyleSheet("font-size:20px; font-weight:700; padding:6px 24px;")
+        # 로고 락업 (solideoS. 브랜드)
+        logo = QLabel(
+            '<span style="color:white;font-weight:800;">solideo</span>'
+            '<span style="color:#F472A6;font-weight:800;">S.</span>')
+        logo.setStyleSheet("font-size:20px; padding:6px 24px 0 24px;")
         lay.addWidget(logo)
-        sub = QLabel("개인정보 점검 · solideo")
+        prod = QLabel("SoliGuard")
+        prod.setStyleSheet("font-size:15px; font-weight:700; padding:0 24px;")
+        lay.addWidget(prod)
+        sub = QLabel(f"개인정보 점검 · v{_VERSION}")
         sub.setStyleSheet("font-size:11px; color:rgba(255,255,255,0.55); padding:0 24px 14px 24px;")
         lay.addWidget(sub)
 
@@ -147,6 +159,10 @@ class MainWindow(QMainWindow):
         self.profile_box.currentTextChanged.connect(self._on_profile_changed)
         wl.addWidget(self.profile_box)
         lay.addWidget(wrap)
+
+        trust = QLabel("🛡  로컬 전용 · 외부 전송 없음")
+        trust.setStyleSheet("font-size:11px; color:rgba(255,255,255,0.55); padding:10px 24px 0 24px;")
+        lay.addWidget(trust)
         return side
 
     def _navigate(self, key: str):
