@@ -15,6 +15,11 @@ PySide6>=6.6
 psd-tools>=1.9     # PSD 텍스트 레이어·래스터 추출
 requests>=2.31     # Figma REST API (옵트인 검사)
 
+# 설정·정기 자동 스캔. 없으면 ~/.soliguard 폴백 / --once(작업 스케줄러) 모드 사용.
+platformdirs>=4.0  # OS 표준 설정·데이터 경로
+APScheduler>=3.10  # 상주 스케줄러(보조). 권장은 Windows 작업 스케줄러 --once
+plyer>=2.1         # 완료 토스트 알림(선택)
+
 # 엑셀(.xlsx) 정밀 파싱 (없으면 표준 라이브러리 폴백 사용)
 openpyxl>=3.1
 # 구형 엑셀(.xls)
