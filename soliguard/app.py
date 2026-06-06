@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import sys
 
-from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .config import CONFIG_FILE, DATA_DIR, AppConfig
@@ -32,6 +32,7 @@ def _grade_icon(grade_key: str) -> QIcon:
 class SoliGuardApp:
     def __init__(self):
         self.app = QApplication.instance() or QApplication(sys.argv)
+        self.app.setFont(QFont("Pretendard", 10))   # 앱 전체 폰트 통일
         self.cfg = AppConfig.load()
         self.app.setStyleSheet(build_qss(self.cfg.theme))
         self.window: MainWindow | None = None

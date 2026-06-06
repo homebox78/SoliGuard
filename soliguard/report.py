@@ -65,10 +65,18 @@ _SEV_COLOR = {
     Severity.MEDIUM: "#D97706",
     Severity.LOW: "#16A34A",
 }
+import os as _os
+
 _FONT_CANDIDATES = [
-    "C:/Windows/Fonts/malgun.ttf",                       # 맑은 고딕(Windows)
-    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",   # 나눔고딕(Linux)
-    "/System/Library/Fonts/AppleSDGothicNeo.ttc",        # macOS
+    # Pretendard 우선(앱 전체 폰트 통일). 시스템/사용자 설치 경로 모두 탐색.
+    "C:/Windows/Fonts/Pretendard-Regular.ttf",
+    _os.path.expandvars(
+        r"%LOCALAPPDATA%/Microsoft/Windows/Fonts/Pretendard-Regular.ttf"),
+    "/usr/share/fonts/truetype/pretendard/Pretendard-Regular.ttf",
+    # 폴백
+    "C:/Windows/Fonts/malgun.ttf",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
 ]
 
 
@@ -116,8 +124,8 @@ def generate_pdf_report(
     c = canvas.Canvas(str(output_path), pagesize=A4)
     width, height = A4
 
-    # ── 헤더 ──
-    c.setFillColor(colors.HexColor("#1E40AF"))
+    # ── 헤더 ── (Solideo 크림슨)
+    c.setFillColor(colors.HexColor("#C8174E"))
     c.rect(0, height - 22 * mm, width, 22 * mm, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont(font, 18)

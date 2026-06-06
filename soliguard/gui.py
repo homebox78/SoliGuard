@@ -333,7 +333,10 @@ class MainWindow(QMainWindow):
 
 
 def main() -> int:
+    from PySide6.QtGui import QFont
+
     app = QApplication(sys.argv)
+    app.setFont(QFont("Pretendard", 10))   # 앱 전체 폰트 통일
     app.setStyleSheet(build_qss("light"))
     win = MainWindow()
     win.show()
