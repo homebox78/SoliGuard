@@ -32,7 +32,10 @@ def _grade_icon(grade_key: str) -> QIcon:
 class SoliGuardApp:
     def __init__(self):
         self.app = QApplication.instance() or QApplication(sys.argv)
-        self.app.setFont(QFont("Pretendard", 10))   # 앱 전체 폰트 통일
+        from . import fonts, icons
+
+        fonts.load_fonts(self.app)                  # Pretendard 등록·적용
+        self.app.setWindowIcon(icons.app_icon())
         self.cfg = AppConfig.load()
         self.app.setStyleSheet(build_qss(self.cfg.theme))
         self.window: MainWindow | None = None

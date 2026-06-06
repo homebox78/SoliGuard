@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__ as _VERSION
+from . import fonts, icons
 
 from .engine import PROFILE_ROLE, run_scan
 from .report import ReportError, generate_pdf_report
@@ -78,6 +79,7 @@ class MainWindow(QMainWindow):
     def __init__(self, cfg=None):
         super().__init__()
         self.setWindowTitle("SoliGuard")
+        self.setWindowIcon(icons.app_icon())
         self.resize(1280, 820)
         self.cfg = cfg
         self.profile = getattr(cfg, "profile", None) or "개발자"
@@ -116,11 +118,17 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(0, 20, 0, 16)
         lay.setSpacing(2)
 
-        # 로고 락업 (solideoS. 브랜드)
-        logo = QLabel(
-            '<span style="color:white;font-weight:800;">solideo</span>'
-            '<span style="color:#F472A6;font-weight:800;">S.</span>')
-        logo.setStyleSheet("font-size:20px; padding:6px 24px 0 24px;")
+        # 로고 락업 (실제 solideo 로고 우선, 없으면 텍스트)
+        logo = QLabel()
+        logo_pix = icons.logo_pixmap(24, white=True)
+        if logo_pix is not None:
+            logo.setPixmap(logo_pix)
+            logo.setStyleSheet("padding:6px 24px 0 24px;")
+        else:
+            logo.setText(
+                '<span style="color:white;font-weight:800;">solideo</span>'
+                '<span style="color:#F472A6;font-weight:800;">S.</span>')
+            logo.setStyleSheet("font-size:20px; padding:6px 24px 0 24px;")
         lay.addWidget(logo)
         prod = QLabel("SoliGuard")
         prod.setStyleSheet("font-size:15px; font-weight:700; padding:0 24px;")
@@ -160,7 +168,7 @@ class MainWindow(QMainWindow):
         wl.addWidget(self.profile_box)
         lay.addWidget(wrap)
 
-        trust = QLabel("🛡  로컬 전용 · 외부 전송 없음")
+        trust = QLabel("로컬 전용 · 외부 전송 없음")
         trust.setStyleSheet("font-size:11px; color:rgba(255,255,255,0.55); padding:10px 24px 0 24px;")
         lay.addWidget(trust)
         return side
@@ -637,7 +645,8 @@ def _read_audit_tail(n: int) -> list[dict]:
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setFont(QFont("Pretendard", 10))
+    fonts.load_fonts(app)            # Pretendard 등록·적용
+    app.setWindowIcon(icons.app_icon())
     app.setStyleSheet(build_qss("light"))
     win = MainWindow()
     win.show()

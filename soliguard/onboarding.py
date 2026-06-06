@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import fonts, icons
 from .config import AppConfig, ScheduleConfig
 
 ROLES = [("개발자", "💻"), ("디자이너", "🎨"), ("기획자", "📝"),
@@ -25,6 +26,7 @@ _FREQ_MAP = {
 _STEPS = ["직무", "점검 설정"]
 
 _QSS = """
+* { font-family: 'Pretendard'; }
 #Backdrop { background: #EFE6EA; }
 #Card { background: #FFFFFF; border-radius: 18px; }
 #Brand { font-size: 17px; }
@@ -85,7 +87,11 @@ class OnboardingWizard(QDialog):
         self.setObjectName("Backdrop")
         self.setMinimumSize(680, 600)
         self.setStyleSheet(_QSS)
-        self.setFont(_pretendard())
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QApplication
+
+        fam = fonts.load_fonts(QApplication.instance())
+        self.setFont(QFont(fam, 10))
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(40, 36, 40, 36)
@@ -105,10 +111,15 @@ class OnboardingWizard(QDialog):
 
         # ── 상단: 브랜드 + 배지 ──
         top = QHBoxLayout()
-        brand = QLabel(
-            '<span style="color:#231815;font-weight:800;">solideo</span>'
-            '<span style="color:#C8174E;font-weight:800;">S.</span>')
-        brand.setObjectName("Brand")
+        logo_pix = icons.logo_pixmap(26, white=False)
+        if logo_pix is not None:
+            brand = QLabel()
+            brand.setPixmap(logo_pix)
+        else:
+            brand = QLabel(
+                '<span style="color:#231815;font-weight:800;">solideo</span>'
+                '<span style="color:#C8174E;font-weight:800;">S.</span>')
+            brand.setObjectName("Brand")
         top.addWidget(brand)
         top.addStretch()
         pill = QLabel("SoliGuard · 초기 설정")
@@ -119,9 +130,9 @@ class OnboardingWizard(QDialog):
         # ── 아이콘 + 제목 ──
         title_row = QHBoxLayout()
         title_row.setSpacing(14)
-        badge = QLabel("🛡")
-        badge.setObjectName("IconBadge")
+        badge = QLabel()
         badge.setFixedSize(52, 52)
+        badge.setPixmap(icons.shield_pixmap(52, stroke=3, color="#FFFFFF", bg="#C8174E"))
         badge.setAlignment(Qt.AlignCenter)
         title_row.addWidget(badge)
         tcol = QVBoxLayout()
@@ -146,7 +157,7 @@ class OnboardingWizard(QDialog):
         c.addWidget(self.pages, 1)
 
         # ── 신뢰 박스 ──
-        trust = QLabel("🛡  이 도구는 외부로 어떤 정보도 전송하지 않습니다. "
+        trust = QLabel("이 도구는 외부로 어떤 정보도 전송하지 않습니다. "
                        "모든 데이터는 이 PC의 로컬 저장소에만 보관됩니다.")
         trust.setObjectName("Trust")
         trust.setWordWrap(True)
@@ -289,9 +300,3 @@ class OnboardingWizard(QDialog):
         cfg.save()
         self.completed.emit(cfg)
         self.accept()
-
-
-def _pretendard():
-    from PySide6.QtGui import QFont
-
-    return QFont("Pretendard", 10)
