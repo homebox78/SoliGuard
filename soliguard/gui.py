@@ -307,6 +307,10 @@ class MainWindow(QMainWindow):
             self._refresh_quarantine()
         elif key == "history":
             self._refresh_history()
+        elif key == "settings" and hasattr(self, "font_info_label"):
+            # 실제 렌더 폰트(fontInfo)를 표시 — 사용자가 직접 확인 가능
+            self.font_info_label.setText(
+                "현재 글꼴: " + self.font_info_label.fontInfo().family())
         self.stack.setCurrentWidget(target)
 
     def _select_nav(self, key: str):
@@ -641,6 +645,9 @@ class MainWindow(QMainWindow):
         fr.addStretch()
         gl.addLayout(fr)
         gl.addWidget(QLabel("직무 프로파일은 좌측 하단 칩에서 복수 선택할 수 있습니다."))
+        self.font_info_label = QLabel("현재 글꼴: 확인 중…")
+        self.font_info_label.setStyleSheet("color:#8B92A0; font-size:12px;")
+        gl.addWidget(self.font_info_label)
         lay.addWidget(gen)
 
         try:
