@@ -42,6 +42,14 @@ class TestRunScan(unittest.TestCase):
         kinds = {f.info_type for f in s.all_findings()}
         self.assertNotIn("API 키/시크릿", kinds)
 
+    def test_user_whitelist_excludes(self):
+        # 카드번호를 사용자 오탐으로 등록 → 다음 스캔에서 제외(구분자 무관)
+        base = run_scan([self.dir], role="developer")
+        self.assertIn("신용카드번호", {f.info_type for f in base.all_findings()})
+        wl = run_scan([self.dir], role="developer",
+                      user_whitelist=["4242-4242-4242-4242"])
+        self.assertNotIn("신용카드번호", {f.info_type for f in wl.all_findings()})
+
     def test_multiple_profiles_union(self):
         # 기획자(시크릿 제외) + 개발자(시크릿 포함) 복수 선택 → 합집합으로 시크릿 검출
         s = run_scan([self.dir], profiles=["기획자", "개발자"])

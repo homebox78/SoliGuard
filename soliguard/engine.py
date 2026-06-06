@@ -85,6 +85,7 @@ def run_scan(
     profiles: "list[str] | None" = None,
     ocr_enabled: bool = True,
     excludes: set[str] | None = None,
+    user_whitelist: "list[str] | None" = None,
     progress_cb: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> ScanSummary:
@@ -106,7 +107,7 @@ def run_scan(
             role_set.add(r)
     excludes = (excludes or set()) | DEFAULT_EXCLUDES
 
-    engine = DetectionEngine(roles=role_set or None)
+    engine = DetectionEngine(roles=role_set or None, user_whitelist=user_whitelist)
     files = collect_files(folders, exclude=excludes)
     total = len(files)
 

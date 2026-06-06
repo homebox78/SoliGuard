@@ -17,8 +17,8 @@ from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFrame,
     QGraphicsDropShadowEffect, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
-    QMainWindow, QMessageBox, QProgressBar, QPushButton, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from . import __version__ as _VERSION
@@ -38,11 +38,12 @@ class ScanWorker(QThread):
     progress = Signal(int, int, str)   # done, total, current_path
     finished_scan = Signal(object)     # engine.ScanSummary
 
-    def __init__(self, folders, profiles, ocr_enabled):
+    def __init__(self, folders, profiles, ocr_enabled, user_whitelist=None):
         super().__init__()
         self.folders = folders
         self.profiles = list(profiles)
         self.ocr_enabled = ocr_enabled
+        self.user_whitelist = list(user_whitelist or [])
         self._stop = False
 
     def stop(self):
@@ -51,6 +52,7 @@ class ScanWorker(QThread):
     def run(self):
         summary = run_scan(
             self.folders, profiles=self.profiles, ocr_enabled=self.ocr_enabled,
+            user_whitelist=self.user_whitelist,
             progress_cb=lambda i, t, p: self.progress.emit(i, t, p),
             should_stop=lambda: self._stop,
         )
@@ -90,6 +92,7 @@ class MainWindow(QMainWindow):
         self.file_results: list = []
         self.row_index: list[tuple[Path, object]] = []
         self._tray_active = False
+        self._closing_mode = False
 
         root = QWidget()
         row = QHBoxLayout(root)
@@ -219,8 +222,16 @@ class MainWindow(QMainWindow):
         scan_btn.setMinimumHeight(66)
         scan_btn.setStyleSheet("font-size:18px;")
         scan_btn.setCursor(Qt.PointingHandCursor)
-        scan_btn.clicked.connect(self.start_scan)
+        scan_btn.clicked.connect(lambda: self.start_scan(False))
         lay.addWidget(scan_btn)
+
+        closing_btn = QPushButton("📁  프로젝트 클로징 점검 — 종료 프로젝트 폴더 일괄 점검·리포트")
+        closing_btn.setObjectName("Ghost")
+        closing_btn.setMinimumHeight(44)
+        closing_btn.setCursor(Qt.PointingHandCursor)
+        closing_btn.clicked.connect(lambda: self.start_scan(True))
+        lay.addWidget(closing_btn)
+
         hint = QLabel("🔒  모든 데이터는 이 PC 안에서만 처리되며 외부로 전송되지 않습니다.")
         hint.setAlignment(Qt.AlignCenter)
         hint.setStyleSheet("color:#7A6A70; padding:2px;")
@@ -301,6 +312,19 @@ class MainWindow(QMainWindow):
         self.unread_banner.setVisible(False)
         lay.addWidget(self.unread_banner)
 
+        # 필터 + 검색
+        filt = QHBoxLayout()
+        filt.addWidget(QLabel("위험도"))
+        self.sev_filter = QComboBox()
+        self.sev_filter.addItems(["전체", "높음", "중간", "낮음"])
+        self.sev_filter.currentTextChanged.connect(self._apply_filter)
+        filt.addWidget(self.sev_filter)
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("파일·유형 검색")
+        self.search_box.textChanged.connect(self._apply_filter)
+        filt.addWidget(self.search_box, 1)
+        lay.addLayout(filt)
+
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["위험도", "파일", "검출 항목", "검출값(마스킹)"])
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -316,6 +340,10 @@ class MainWindow(QMainWindow):
             b.setObjectName("Ghost" if ghost else "Danger")
             b.clicked.connect(slot)
             bar.addWidget(b)
+        fp = QPushButton("이건 오탐이에요")
+        fp.setObjectName("Ghost")
+        fp.clicked.connect(self._mark_false_positive)
+        bar.addWidget(fp)
         bar.addStretch()
         report_btn = QPushButton("📑  리포트 저장")
         report_btn.setObjectName("Primary")
@@ -538,16 +566,19 @@ class MainWindow(QMainWindow):
         return ", ".join(self.profiles) if self.profiles else "(선택 없음)"
 
     # ------------------------------------------------------------------ 동작
-    def start_scan(self):
-        folder = QFileDialog.getExistingDirectory(self, "스캔할 폴더 선택")
+    def start_scan(self, closing: bool = False):
+        title = "프로젝트 폴더 선택 (클로징 점검)" if closing else "스캔할 폴더 선택"
+        folder = QFileDialog.getExistingDirectory(self, title)
         if not folder:
             return
+        self._closing_mode = closing
         self._select_nav("dashboard")
         self.stack.setCurrentWidget(self.scanning)
         self.progress_bar.setValue(0)
         ocr = getattr(self, "ocr_check", None)
         ocr_enabled = ocr.isChecked() if ocr else True
-        self.worker = ScanWorker([Path(folder)], list(self.profiles), ocr_enabled)
+        wl = list(getattr(self.cfg, "whitelist", []) or [])
+        self.worker = ScanWorker([Path(folder)], list(self.profiles), ocr_enabled, wl)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_scan.connect(self._on_finished)
         self.worker.start()
@@ -606,6 +637,15 @@ class MainWindow(QMainWindow):
             "warn" if (summary.total_findings == 0 and skipped > 0)
             else summary.risk_grade_key)
 
+        # 프로젝트 클로징 점검: 증빙 리포트 발급 유도
+        if self._closing_mode:
+            self._closing_mode = False
+            if QMessageBox.question(
+                self, "프로젝트 클로징 점검",
+                "프로젝트 점검이 끝났습니다. 보안 증빙용 진단 리포트(PDF)를 발급할까요?"
+            ) == QMessageBox.Yes:
+                self.save_report()
+
     def _populate_table(self, results):
         self.table.setRowCount(0)
         self.row_index = []
@@ -619,6 +659,44 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row, 2, QTableWidgetItem(f.info_type))
                 self.table.setItem(row, 3, QTableWidgetItem(f.masked))
                 self.row_index.append((Path(r.path), f))
+        if hasattr(self, "sev_filter"):
+            self._apply_filter()
+
+    def _apply_filter(self, *_):
+        sev = self.sev_filter.currentText()
+        q = self.search_box.text().strip().lower()
+        for row in range(self.table.rowCount()):
+            sev_v = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
+            text = " ".join(
+                self.table.item(row, c).text() if self.table.item(row, c) else ""
+                for c in range(self.table.columnCount())).lower()
+            show = (sev == "전체" or sev_v == sev) and (not q or q in text)
+            self.table.setRowHidden(row, not show)
+
+    def _mark_false_positive(self):
+        rows = sorted({i.row() for i in self.table.selectedIndexes()})
+        if not rows:
+            QMessageBox.information(self, "SoliGuard", "오탐으로 표시할 행을 선택하세요.")
+            return
+        from .config import AppConfig
+
+        cfg = self.cfg or AppConfig.load()
+        wl = list(cfg.whitelist or [])
+        added = 0
+        for r in rows:
+            _, finding = self.row_index[r]
+            if finding.raw not in wl:
+                wl.append(finding.raw)
+                added += 1
+        cfg.whitelist = wl
+        cfg.save()
+        self.cfg = cfg
+        # 현재 결과 테이블에서도 즉시 숨김
+        for r in rows:
+            self.table.setRowHidden(r, True)
+        QMessageBox.information(
+            self, "오탐 등록",
+            f"{added}건을 오탐(제외)으로 등록했습니다. 다음 점검부터 제외됩니다.")
 
     def _selected_by_file(self):
         grouped: dict[Path, list] = {}

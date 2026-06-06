@@ -15,7 +15,7 @@ from typing import Iterable, Sequence
 
 from .base import Confidence, Detector, Finding, LineIndex, Severity
 from .detectors import DEFAULT_DETECTORS
-from .whitelist import is_dummy
+from .whitelist import build_user_keys, is_dummy, norm_key
 
 __all__ = ["DetectionEngine", "ScanSummary"]
 
@@ -49,6 +49,7 @@ class DetectionEngine:
         role: str | None = None,
         roles: Iterable[str] | None = None,
         enabled_types: Iterable[str] | None = None,
+        user_whitelist: Iterable[str] | None = None,
     ) -> None:
         """엔진 생성.
 
@@ -62,6 +63,7 @@ class DetectionEngine:
         # 등록 순서 = 중복 스팬 우선순위
         self._all: list[Detector] = list(detectors)
         self._rank = {d.name: i for i, d in enumerate(self._all)}
+        self._user_wl: set[str] = build_user_keys(user_whitelist)
 
         role_set: set[str] = set(roles or ())
         if role:
@@ -98,6 +100,8 @@ class DetectionEngine:
             for finding in det.detect(text, line_index):
                 if is_dummy(finding.detector, finding.raw):
                     continue
+                if self._user_wl and norm_key(finding.raw) in self._user_wl:
+                    continue  # 사용자 지정 오탐 제외
                 raw_findings.append(finding)
 
         resolved = self._resolve_overlaps(raw_findings)

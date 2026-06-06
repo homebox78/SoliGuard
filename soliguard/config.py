@@ -48,6 +48,7 @@ class AppConfig:
     # 자동 완전삭제는 의도적으로 제공하지 않는다(사고 방지).
     auto_action: str = "report_only"   # "report_only" | "quarantine"
     last_grade: str = "safe"           # 트레이 아이콘 색용 캐시
+    whitelist: list[str] = field(default_factory=list)  # 사용자 지정 오탐(제외) 값
 
     @classmethod
     def load(cls) -> "AppConfig":

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from .validators import digits_only
 
-__all__ = ["is_dummy"]
+__all__ = ["is_dummy", "norm_key", "build_user_keys", "is_user_excluded"]
 
 # 카드사 공개 테스트 번호(Luhn은 통과하지만 실제 카드가 아님)
 _TEST_CARD_NUMBERS = frozenset(
@@ -35,6 +35,22 @@ _DUMMY_SEQUENCES = frozenset(
         "1234561234567",
     }
 )
+
+
+def norm_key(raw: str) -> str:
+    """오탐 비교용 정규화 키: 숫자가 있으면 숫자만, 없으면 소문자 trim."""
+    d = digits_only(raw)
+    return d if d else raw.strip().lower()
+
+
+def build_user_keys(items) -> set[str]:
+    """사용자 화이트리스트 원문 목록 → 정규화 키 집합."""
+    return {norm_key(x) for x in (items or ()) if x and x.strip()}
+
+
+def is_user_excluded(raw: str, user_keys: set[str]) -> bool:
+    """검출값이 사용자 지정 오탐(제외)에 해당하면 True."""
+    return bool(user_keys) and norm_key(raw) in user_keys
 
 
 def is_dummy(detector: str, raw: str) -> bool:
