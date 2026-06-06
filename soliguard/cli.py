@@ -51,6 +51,10 @@ def main(argv: list[str] | None = None) -> int:
         "--no-ocr", action="store_true",
         help="이미지/스캔 PDF OCR 비활성화(기본은 로컬 OCR 활성)",
     )
+    parser.add_argument(
+        "--report", metavar="PATH",
+        help="PDF 진단 리포트 저장 경로(reportlab 필요)",
+    )
     args = parser.parse_args(argv)
 
     target = Path(args.target)
@@ -62,11 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"활성 검출기: {', '.join(engine.active_detectors)}")
     print(f"스캔 대상: {target}\n")
 
+    file_results = list(scan_paths([target], engine, ocr_enabled=not args.no_ocr))
+
     all_findings: list[tuple[Path, object]] = []
     unreadable: list[tuple[Path, str]] = []
-    scanned = 0
-    for result in scan_paths([target], engine, ocr_enabled=not args.no_ocr):
-        scanned += 1
+    scanned = len(file_results)
+    for result in file_results:
         if result.status == "검사불가":
             unreadable.append((result.path, result.error))
             continue
@@ -104,6 +109,16 @@ def main(argv: list[str] | None = None) -> int:
     if summary.by_type:
         print("유형별:", ", ".join(f"{k} {v}" for k, v in summary.by_type.items()))
     print(f"PC 위험 등급: {_GRADE_ICON.get(grade, '')} {grade}")
+
+    if args.report:
+        from .report import ReportError, generate_pdf_report
+
+        try:
+            out = generate_pdf_report(file_results, args.role, Path(args.report))
+            print(f"\n📑 진단 리포트 저장: {out}")
+        except ReportError as exc:
+            print(f"\n리포트 생성 실패: {exc}", file=sys.stderr)
+            return 3
     return 0
 
 

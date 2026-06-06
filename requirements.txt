@@ -5,6 +5,9 @@
 # 조치 계층 - AES-256-GCM 암호화 격리 (권장)
 cryptography>=42.0
 
+# PDF 진단 리포트 생성 (권장)
+reportlab>=4.1
+
 # 엑셀(.xlsx) 정밀 파싱 (없으면 표준 라이브러리 폴백 사용)
 openpyxl>=3.1
 # 구형 엑셀(.xls)
