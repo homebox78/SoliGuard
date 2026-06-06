@@ -21,29 +21,16 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from .detection import DetectionEngine
-from .detection.detectors import (
-    ROLE_DESIGNER, ROLE_DEVELOPER, ROLE_FINANCE, ROLE_PM, ROLE_PLANNER,
-)
-from .report import ReportError, generate_pdf_report, summarize_results
-from .scanner import collect_files, scan_file
+from .engine import PROFILE_ROLE, run_scan
+from .report import ReportError, generate_pdf_report
 from .theme import GRADE_DISPLAY, build_qss
-
-# 화면 표시 직무명 → 엔진 role
-PROFILE_ROLE = {
-    "개발자": ROLE_DEVELOPER,
-    "디자이너": ROLE_DESIGNER,
-    "기획자": ROLE_PLANNER,
-    "PM": ROLE_PM,
-    "전산사무": ROLE_FINANCE,
-}
 
 
 class ScanWorker(QThread):
     """스캔을 백그라운드에서 실행. 진행률/완료를 시그널로 전달."""
 
     progress = Signal(int, int, str)   # done, total, current_path
-    finished_scan = Signal(object)     # list[FileScanResult]
+    finished_scan = Signal(object)     # engine.ScanSummary
 
     def __init__(self, folders: list[Path], role: str | None, ocr_enabled: bool):
         super().__init__()
@@ -56,16 +43,14 @@ class ScanWorker(QThread):
         self._stop = True
 
     def run(self) -> None:
-        engine = DetectionEngine(role=self.role)
-        files = collect_files(self.folders)
-        total = len(files)
-        results = []
-        for i, fpath in enumerate(files, 1):
-            if self._stop:
-                break
-            self.progress.emit(i, total, str(fpath))
-            results.append(scan_file(fpath, engine, ocr_enabled=self.ocr_enabled))
-        self.finished_scan.emit(results)
+        summary = run_scan(
+            self.folders,
+            role=self.role,
+            ocr_enabled=self.ocr_enabled,
+            progress_cb=lambda i, t, p: self.progress.emit(i, t, p),
+            should_stop=lambda: self._stop,
+        )
+        self.finished_scan.emit(summary)
 
 
 class MainWindow(QMainWindow):
@@ -236,9 +221,8 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(done)
         self.progress_path.setText(f"검사 중: {path}")
 
-    def _on_finished(self, results: list) -> None:
-        self.file_results = results
-        summary = summarize_results(results)
+    def _on_finished(self, summary) -> None:
+        self.file_results = summary.file_results
         disp = GRADE_DISPLAY.get(summary.risk_grade, {})
         self.grade_label.setText(
             f"내 PC 위험 등급: {disp.get('icon', '')} {summary.risk_grade}"
@@ -247,7 +231,7 @@ class MainWindow(QMainWindow):
             f"점검 결과 — 위험 {summary.total_findings}건 "
             f"(검사 {summary.scanned} / 검사불가 {summary.skipped})"
         )
-        self._populate_table(results)
+        self._populate_table(summary.file_results)
         self.stack.setCurrentWidget(self.results)
 
     def _populate_table(self, results: list) -> None:

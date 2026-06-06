@@ -23,7 +23,7 @@ from .detection.detectors import (
     ROLE_PLANNER,
     ROLE_PM,
 )
-from .scanner import scan_paths
+from .engine import run_scan
 
 _GRADE_ICON = {"위험": "🔴", "주의": "🟡", "안전": "🟢"}
 _SEV_ICON = {Severity.HIGH: "🔴", Severity.MEDIUM: "🟡", Severity.LOW: "🟢"}
@@ -66,11 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"활성 검출기: {', '.join(engine.active_detectors)}")
     print(f"스캔 대상: {target}\n")
 
-    file_results = list(scan_paths([target], engine, ocr_enabled=not args.no_ocr))
+    scan_summary = run_scan([target], role=args.role, ocr_enabled=not args.no_ocr)
+    file_results = scan_summary.file_results
 
     all_findings: list[tuple[Path, object]] = []
     unreadable: list[tuple[Path, str]] = []
-    scanned = len(file_results)
+    scanned = scan_summary.scanned + scan_summary.skipped
     for result in file_results:
         if result.status == "검사불가":
             unreadable.append((result.path, result.error))

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
-from .detection import DetectionEngine, Finding
+from .detection import DetectionEngine, Finding, Severity
 from .extractors import ExtractionError, extract_text, is_supported
 
 __all__ = [
@@ -33,6 +33,14 @@ class FileScanResult:
     @property
     def count(self) -> int:
         return len(self.findings)
+
+    @property
+    def top_severity(self):
+        """이 파일에서 가장 높은 위험도(없으면 None)."""
+        if not self.findings:
+            return None
+        order = {Severity.HIGH: 3, Severity.MEDIUM: 2, Severity.LOW: 1}
+        return max(self.findings, key=lambda f: order[f.severity]).severity
 
 
 def scan_file(

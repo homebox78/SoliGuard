@@ -88,12 +88,15 @@ def _register_font() -> str:
 
 
 def generate_pdf_report(
-    file_results: Sequence,
+    results_or_summary,
     profile: str | None,
     output_path: str | Path,
     project_name: str = "",
 ) -> Path:
-    """진단 리포트 PDF를 생성하고 저장 경로를 반환."""
+    """진단 리포트 PDF를 생성하고 저장 경로를 반환.
+
+    results_or_summary 는 FileScanResult 리스트 또는 .file_results 를 가진
+    ScanSummary(engine.run_scan 결과) 둘 다 받는다(문서 스펙 호환)."""
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
@@ -104,6 +107,8 @@ def generate_pdf_report(
             "PDF 리포트 생성에 reportlab 이 필요합니다 (pip install reportlab)"
         ) from e
 
+    # ScanSummary(.file_results) 또는 리스트 모두 허용
+    file_results = getattr(results_or_summary, "file_results", results_or_summary)
     output_path = Path(output_path)
     summary = summarize_results(file_results)
     font = _register_font()

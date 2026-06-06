@@ -43,7 +43,9 @@ soliguard/
   scanner.py          # 스캔 오케스트레이션: 추출→검출, '검사불가' 격리
   theme.py            # ── UI 토큰 ── 디자인 토큰→QSS, 등급/위험도 색(Qt 불필요·순수)
   gui.py              # ── GUI ── PySide6 데스크톱 앱(대시보드→스캔→결과→조치/리포트)
+  engine.py           # ── 파사드 ── run_scan(folders,...) → ScanSummary (상위 진입점)
   cli.py              # 데모 CLI(전체 파이프라인, --report 로 PDF 발급)
+  __main__.py         # python -m soliguard 진입점 → cli
 tests/                # unittest 41케이스 (핵심은 외부 의존성 0)
 examples/             # 데모용 더미 데이터(.py/.xlsx/.hwpx/.pdf)
 ```
@@ -62,6 +64,30 @@ examples/             # 데모용 더미 데이터(.py/.xlsx/.hwpx/.pdf)
 추출 계층은 한 파일의 파싱 실패가 전체 스캔을 멈추지 않도록 `ExtractionError`로 격리해
 `검사불가`로 분리 기록한다(기획서 9장 리스크 #3). `.hwpx`와 `.xlsx`는 표준 라이브러리만으로
 동작하고(국내 SI 차별점인 한글 파싱 포함), 나머지 포맷은 선택 의존성이 있을 때 활성화된다.
+
+상위 진입점은 `engine.run_scan(folders, role/profile, progress_cb, should_stop) → ScanSummary`
+이며 CLI·GUI 모두 이 파사드를 공유한다.
+
+## 문서 스펙 ↔ 실제 구현 매핑
+
+설계 문서(`soliguard/docs/`)는 평면 모듈(`detectors.py` 등)을 가정하지만, 실제 구현은
+유지보수에 유리하도록 `detection/` 패키지로 재구성했다. 문서 코드의 이름은 아래로 대응된다.
+
+| 문서 스펙 | 실제 구현 | 비고 |
+|---|---|---|
+| `soliguard.detectors` (평면) | `soliguard.detection` 패키지 | validators/detectors/engine/whitelist로 분리 |
+| `Finding.kind` | `Finding.info_type` | 동일 의미 |
+| `Severity` ("높음/중간/낮음") | 동일 | 값 일치 |
+| `engine.run_scan / ScanSummary` | `engine.run_scan / ScanSummary` | 제공됨(파사드) |
+| `ScanSummary.risk_grade` ("safe/warn/danger") | `risk_grade`("위험/주의/안전") + `risk_grade_key`("danger/warn/safe") | 한국어가 정규값, 영문 키 별도 제공 |
+| `scanner.scan_text(text, rules)` | `DetectionEngine.scan_text(text)` | 규칙은 엔진/직무 프로파일로 관리 |
+| `report.generate_pdf_report(summary, ...)` | 동일(리스트/ScanSummary 모두 허용) | 제공됨 |
+| `python -m soliguard` | 동일 | `__main__.py` 제공 |
+| CLI `scan ... --profile 개발자` | `... --role developer` | 서브커맨드 대신 단일 명령, role 인자 |
+
+### 미구현(설계 문서에 있으나 아직 코드化 전)
+
+`config.py`(설정), `scheduler.py`(정기 자동 스캔·Windows 작업 등록), `app.py`/`onboarding.py`(트레이·온보딩 마법사), 패키징(`pyproject.toml`/PyInstaller/Inno Setup)은 다음 단계 대상이다. 현재는 백엔드 파이프라인 + GUI 골격 + 리포트까지 동작한다.
 
 ## 실행
 
