@@ -45,12 +45,23 @@ soliguard/
   report.py           # ── 리포트 계층 ── PDF 진단서 생성(마스킹 값만 기재, reportlab)
   scanner.py          # 스캔 오케스트레이션: 추출→검출, '검사불가' 격리
   theme.py            # ── UI 토큰 ── 디자인 토큰→QSS, 등급/위험도 색(Qt 불필요·순수)
-  gui.py              # ── GUI ── PySide6 데스크톱 앱(대시보드→스캔→결과→조치/리포트)
+  gui.py              # ── GUI ── PySide6 메인 윈도우(대시보드→스캔→결과→조치/리포트)
+  onboarding.py       # 최초 실행 온보딩 마법사(직무·자동점검·OCR)
+  app.py              # ── 앱 진입점 ── 트레이 상주 + 온보딩 분기 + 테마(soliguard-gui)
+  ui/settings_figma.py# Figma 옵트인 설정 섹션(동의+토큰 이중 가드)
+  config.py           # 설정 저장/로드(platformdirs 또는 ~/.soliguard)
+  scheduler.py        # 정기 자동 스캔 + Windows 작업 등록(--once)  (soliguard-agent)
   engine.py           # ── 파사드 ── run_scan(folders,...) → ScanSummary (상위 진입점)
-  cli.py              # 데모 CLI(전체 파이프라인, --report 로 PDF 발급)
+  cli.py              # CLI(전체 파이프라인, --report 로 PDF 발급)  (soliguard)
   __main__.py         # python -m soliguard 진입점 → cli
-tests/                # unittest 41케이스 (핵심은 외부 의존성 0)
+tests/                # unittest 93케이스 (핵심은 외부 의존성 0)
+  fixtures/           # PSD 픽스처 생성 스크립트
 examples/             # 데모용 더미 데이터(.py/.xlsx/.hwpx/.pdf)
+pyproject.toml        # 패키지 메타·optional 의존성·콘솔 스크립트
+build_exe.spec        # PyInstaller(GUI exe + 에이전트 exe)
+installer.iss         # Inno Setup 설치 스크립트(작업 스케줄러 등록 포함)
+assets/soliguard.ico  # 앱/설치 아이콘
+.github/workflows/    # CI(unittest 3.10~3.12 + compileall)
 ```
 
 정규식(1차)과 검증 함수(2차)를 독립 모듈로 분리해, 추후 **문맥 기반 AI 판단**으로 2차 검증만 교체·고도화할 수 있다(기획서 6장).
@@ -88,9 +99,27 @@ examples/             # 데모용 더미 데이터(.py/.xlsx/.hwpx/.pdf)
 | `python -m soliguard` | 동일 | `__main__.py` 제공 |
 | CLI `scan ... --profile 개발자` | `... --role developer` | 서브커맨드 대신 단일 명령, role 인자 |
 
-### 미구현(설계 문서에 있으나 아직 코드化 전)
+### 구현 현황
 
-`config.py`(설정), `scheduler.py`(정기 자동 스캔·Windows 작업 등록), `app.py`/`onboarding.py`(트레이·온보딩 마법사), 패키징(`pyproject.toml`/PyInstaller/Inno Setup)은 다음 단계 대상이다. 현재는 백엔드 파이프라인 + GUI 골격 + 리포트까지 동작한다.
+설계 문서의 모듈이 대부분 구현됐다: 검출 엔진·추출·조치·리포트·스캔 파사드(`run_scan`),
+디자인 파일(PSD/XD)·Figma 옵트인, 직무 프로파일, GUI(메인/온보딩/트레이 앱)·테마,
+설정·스케줄러(Windows 작업 등록), 패키징(pyproject/PyInstaller/Inno Setup), CI.
+
+남은 것은 GUI의 상용 디테일(결과 필터·아코디언·격리함/이력 화면·빈상태 일러스트 등
+화면설계서 9화면 전부)과 실제 exe 빌드·서명, 그리고 OCR/디자인 라이브러리를 포함한
+설치 패키지 산출이다. GUI 런타임은 PySide6 설치 환경에서 검증해야 한다.
+
+## 빌드 & 배포 (설치형 exe)
+
+```powershell
+pip install -e ".[all,build]"          # 전체 의존성 + PyInstaller
+pyinstaller build_exe.spec             # dist/SoliGuard/{SoliGuard,SoliGuardAgent}.exe
+ISCC installer.iss                     # SoliGuard_Setup.exe (Inno Setup)
+```
+
+생애주기: 설치(작업 스케줄러 등록 옵션) → 최초 실행 온보딩 → 메인 앱(트레이 상주) →
+주기적으로 OS가 `SoliGuardAgent.exe --once` 를 깨워 무인 스캔·리포트·토스트 알림.
+자동 완전삭제는 제공하지 않으며, 자동 격리는 설정 시에만 동작한다.
 
 ## 실행
 

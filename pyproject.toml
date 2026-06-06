@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soliguard"
+version = "0.4.0"
+description = "SoliGuard - SI 실무자용 개인정보 검출·점검 데스크톱 도구 (100% 로컬)"
+authors = [{ name = "Solideo" }]
+requires-python = ">=3.10"
+readme = "README.md"
+# 핵심 엔진/CLI 는 표준 라이브러리만으로 동작한다(필수 의존성 없음).
+# 포맷 확장·GUI·리포트·스케줄은 아래 optional 그룹으로 선택 설치한다.
+dependencies = []
+
+[project.optional-dependencies]
+formats = [
+    "openpyxl>=3.1", "xlrd>=2.0", "python-docx>=1.1", "pdfplumber>=0.11",
+    "olefile>=0.47", "chardet>=5.2", "psd-tools>=1.9",
+]
+ocr = ["pytesseract>=0.3.10", "Pillow>=10.0", "pdf2image>=1.17"]
+report = ["reportlab>=4.1"]
+quarantine = ["cryptography>=42.0"]
+gui = ["PySide6>=6.6"]
+schedule = ["APScheduler>=3.10", "platformdirs>=4.0", "plyer>=2.1"]
+figma = ["requests>=2.31"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+build = ["pyinstaller>=6.5"]
+all = [
+    "openpyxl>=3.1", "xlrd>=2.0", "python-docx>=1.1", "pdfplumber>=0.11",
+    "olefile>=0.47", "chardet>=5.2", "psd-tools>=1.9",
+    "pytesseract>=0.3.10", "Pillow>=10.0", "pdf2image>=1.17",
+    "reportlab>=4.1", "cryptography>=42.0", "PySide6>=6.6",
+    "APScheduler>=3.10", "platformdirs>=4.0", "plyer>=2.1", "requests>=2.31",
+]
+
+[project.scripts]
+soliguard = "soliguard.cli:main"                  # CLI
+soliguard-gui = "soliguard.app:main"              # GUI(트레이 상주)
+soliguard-agent = "soliguard.scheduler:run_agent" # 백그라운드 에이전트(--once)
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["soliguard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "ocr: OCR(Tesseract) 필요",
+    "psd: PSD(psd-tools) 필요",
+    "network: 네트워크 모킹",
+]
+
+[tool.coverage.run]
+source = ["soliguard"]
+branch = true
+omit = ["*/gui.py", "*/app.py", "*/ui/*", "*/onboarding.py", "tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
