@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from soliguard.detection import DetectionEngine
-from soliguard.scanner import scan_file, scan_paths
+from soliguard.scanner import collect_files, scan_file, scan_paths
 
 
 class TestScanner(unittest.TestCase):
@@ -41,6 +41,22 @@ class TestScanner(unittest.TestCase):
         self.assertEqual(statuses, ["검사불가", "완료"])
         completed = [r for r in results if r.status == "완료"]
         self.assertEqual(sum(r.count for r in completed), 1)
+
+    def test_collect_files_filters_unsupported(self):
+        (self.dir / "a.txt").write_text("x", encoding="utf-8")
+        (self.dir / "b.unknownext").write_text("y", encoding="utf-8")
+        (self.dir / "c.pdf").write_bytes(b"z")
+        files = collect_files([self.dir])
+        names = sorted(p.name for p in files)
+        self.assertEqual(names, ["a.txt", "c.pdf"])  # unknownext 제외
+
+    def test_collect_files_exclude_dir(self):
+        sub = self.dir / "node_modules"
+        sub.mkdir()
+        (sub / "x.txt").write_text("x", encoding="utf-8")
+        (self.dir / "y.txt").write_text("y", encoding="utf-8")
+        files = collect_files([self.dir], exclude={"node_modules"})
+        self.assertEqual([p.name for p in files], ["y.txt"])
 
 
 if __name__ == "__main__":

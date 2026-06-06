@@ -41,6 +41,8 @@ soliguard/
   actions.py          # ── 조치 계층 ── 마스킹 / AES-256-GCM 격리·복원 / 안전 삭제 + 감사 로그
   report.py           # ── 리포트 계층 ── PDF 진단서 생성(마스킹 값만 기재, reportlab)
   scanner.py          # 스캔 오케스트레이션: 추출→검출, '검사불가' 격리
+  theme.py            # ── UI 토큰 ── 디자인 토큰→QSS, 등급/위험도 색(Qt 불필요·순수)
+  gui.py              # ── GUI ── PySide6 데스크톱 앱(대시보드→스캔→결과→조치/리포트)
   cli.py              # 데모 CLI(전체 파이프라인, --report 로 PDF 발급)
 tests/                # unittest 41케이스 (핵심은 외부 의존성 0)
 examples/             # 데모용 더미 데이터(.py/.xlsx/.hwpx/.pdf)

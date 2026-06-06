@@ -8,6 +8,9 @@ cryptography>=42.0
 # PDF 진단 리포트 생성 (권장)
 reportlab>=4.1
 
+# GUI (데스크톱 앱). 핵심 엔진/CLI는 PySide6 없이 동작.
+PySide6>=6.6
+
 # 엑셀(.xlsx) 정밀 파싱 (없으면 표준 라이브러리 폴백 사용)
 openpyxl>=3.1
 # 구형 엑셀(.xls)
