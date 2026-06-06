@@ -159,9 +159,11 @@ function Installer({ onClose, onFinish }) {
             </div>
             {step !== 4 && (
               <div className="inst-foot">
-                {step > 0 && step < 5 && <button className="btn btn-ghost" onClick={prev}><Icon name="chevL" size={15} /> 이전</button>}
+                <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600 }}>단계 {Math.min(step + 1, 6)} / 6</span>
+                {step < 5 && <button className="btn btn-quiet btn-sm" onClick={onClose}>취소</button>}
                 <div style={{ flex: 1 }} />
-                {step < 4 && <button className="btn btn-primary" disabled={step === 1 && !agree} onClick={next}>다음 <Icon name="chevR" size={15} /></button>}
+                {step > 0 && step < 5 && <button className="btn btn-ghost" onClick={prev}><Icon name="chevL" size={15} /> 이전</button>}
+                {step < 4 && <button className="btn btn-primary" disabled={step === 1 && !agree} onClick={next}>{step === 3 ? '설치 시작' : '다음'} <Icon name="chevR" size={15} /></button>}
                 {step === 5 && <button className="btn btn-primary" onClick={() => onFinish(runNow)}><Icon name="check" size={16} /> 마침</button>}
               </div>
             )}
@@ -175,13 +177,31 @@ function Installer({ onClose, onFinish }) {
 function InstWelcome() {
   return (
     <div className="fade-up">
-      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-.02em' }}>솔리가드 설치를 시작합니다</h1>
-      <p style={{ color: 'var(--text-2)', fontSize: 13.5, lineHeight: 1.65, marginTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 16 }}>
+        <AppIcon size={54} />
+        <div>
+          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, letterSpacing: '-.02em' }}>솔리가드 설치를 시작합니다</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: 'var(--safe)', background: 'var(--safe-bg)', padding: '3px 9px', borderRadius: 999 }}>
+              <Icon name="shieldCheck" size={13} /> 디지털 서명 확인됨
+            </span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>게시자 solideo</span>
+          </div>
+        </div>
+      </div>
+      <p style={{ color: 'var(--text-2)', fontSize: 13.5, lineHeight: 1.65, margin: 0 }}>
         설치형 도구로, 내 PC에 흩어진 개인정보·민감정보를 <b>스캔·검출하고 마스킹·격리·삭제</b>합니다. 모든 작업은 <b>설치 PC 로컬</b>에서만 수행됩니다.
       </p>
-      <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-        {['한글(HWP) 2020 호환', 'Windows 10/11', 'Tesseract 한국어 OCR 포함'].map(c => (
-          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-alt)', fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
+      <div style={{ display: 'flex', gap: 0, marginTop: 16, marginBottom: 16, padding: '12px 18px', borderRadius: 12, background: 'var(--surface-alt)', border: '1px solid var(--border)', fontSize: 12.5 }}>
+        <div style={{ flex: 1 }}><div style={{ color: 'var(--text-3)', fontSize: 11, marginBottom: 2 }}>버전</div><b className="mono">1.0.0</b></div>
+        <div style={{ width: 1, background: 'var(--border)', margin: '0 18px' }} />
+        <div style={{ flex: 1 }}><div style={{ color: 'var(--text-3)', fontSize: 11, marginBottom: 2 }}>설치 용량</div><b className="mono">312 MB</b></div>
+        <div style={{ width: 1, background: 'var(--border)', margin: '0 18px' }} />
+        <div style={{ flex: 1.4 }}><div style={{ color: 'var(--text-3)', fontSize: 11, marginBottom: 2 }}>지원 OS</div><b>Windows 10 / 11</b></div>
+      </div>
+      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+        {['한글(HWP) 2020 호환', 'Tesseract 한국어 OCR 포함', '관리자 권한 필요'].map(c => (
+          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 13px', borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
             <Icon name="check" size={14} stroke={2.6} style={{ color: 'var(--safe)' }} /> {c}
           </span>
         ))}
@@ -251,7 +271,7 @@ function InstComponents({ opts, setOpts }) {
             <Icon name={ic} size={18} style={{ color: opts[k] ? 'var(--brand)' : 'var(--text-3)', marginTop: 1, flex: 'none' }} />
             <span style={{ flex: 1 }}>
               <span style={{ fontSize: 13.5, fontWeight: 700, display: 'block' }}>{t1}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{t2}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginTop: 1 }}>{t2}</span>
             </span>
           </button>
         ))}
@@ -400,21 +420,21 @@ function Onboarding({ onClose }) {
 
 function OnbWelcome() {
   const promises = [
-    ['shield', '로컬 처리', '모든 데이터는 이 PC 안에서만 처리되고 외부로 전송되지 않습니다'],
+    ['shield', '로컬 처리', '이 PC 안에서만 처리하고 외부로 전송하지 않습니다'],
     ['checkCircle', '정확한 검출', '체크섬·Luhn·엔트로피 2단계 검증으로 오탐을 줄입니다'],
-    ['fileText', '법규 증빙', '발주처 보안 감사·개인정보보호법 대응 리포트를 발급합니다'],
+    ['fileText', '법규 증빙', '발주처 감사·개인정보보호법 대응 리포트를 발급합니다'],
   ];
   return (
     <div className="fade-up" style={{ textAlign: 'center' }}>
-      <div style={{ display: 'grid', placeItems: 'center', marginBottom: 14 }}><AppIcon size={64} /></div>
-      <h1 style={{ margin: 0, fontSize: 23, fontWeight: 800, letterSpacing: '-.02em' }}>내 PC의 고객 데이터, 먼저 찾습니다</h1>
+      <div style={{ display: 'grid', placeItems: 'center', marginBottom: 12 }}><AppIcon size={56} /></div>
+      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-.02em' }}>내 PC의 고객 데이터, 먼저 찾습니다</h1>
       <p style={{ color: 'var(--text-2)', fontSize: 13.5, marginTop: 8 }}>프로젝트가 끝나면, 데이터도 깨끗하게 — 솔리가드</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 22, textAlign: 'left' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 18, textAlign: 'left' }}>
         {promises.map(([ic, t, d]) => (
           <div key={t} className="card" style={{ padding: 16 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--pink-50)', color: 'var(--brand)', display: 'grid', placeItems: 'center', marginBottom: 10 }}><Icon name={ic} size={19} /></div>
             <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3, lineHeight: 1.5 }}>{d}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4, lineHeight: 1.5, minHeight: 36 }}>{d}</div>
           </div>
         ))}
       </div>

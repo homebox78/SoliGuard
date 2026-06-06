@@ -14,9 +14,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QFileDialog,
-    QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QHeaderView, QInputDialog,
-    QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QFrame, QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QHeaderView,
+    QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
+    QPushButton, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 from PySide6.QtGui import QColor
 
@@ -280,6 +281,8 @@ class MainWindow(QMainWindow):
         self.row_index = []
         self._tray_active = False
         self._closing_mode = False
+        self._action_counts = {"mask": 0, "quarantine": 0, "delete": 0}
+        self._prev_grade = "안전"
 
         root = QWidget()
         row = QHBoxLayout(root)
@@ -291,11 +294,12 @@ class MainWindow(QMainWindow):
         self.scanning = self._build_scanning()
         self.scanconfig = self._build_scanconfig()
         self.results = self._build_results()
+        self.complete = self._build_complete()
         self.quarantine = self._build_quarantine()
         self.history = self._build_history()
         self.settings = self._build_settings()
         for wdg in (self.dashboard, self.scanning, self.scanconfig, self.results,
-                    self.quarantine, self.history, self.settings):
+                    self.complete, self.quarantine, self.history, self.settings):
             self.stack.addWidget(wdg)
         row.addWidget(self.stack, 1)
         self.setCentralWidget(root)
@@ -639,9 +643,18 @@ class MainWindow(QMainWindow):
                                       self.stack.setCurrentWidget(self.dashboard)))
         head.addWidget(back)
         head.addStretch()
-        self.report_btn = QPushButton("✓  점검 완료 · 리포트")
+        # 뷰 세그먼트
+        self._view_seg = {}
+        for key, label in [("table", "≣ 테이블"), ("group", "◇ 그룹"), ("cards", "▦ 카드")]:
+            b = QPushButton(label)
+            b.setCheckable(True)
+            b.clicked.connect(lambda _=False, k=key: self._set_result_view(k))
+            self._view_seg[key] = b
+            head.addWidget(b)
+        head.addSpacing(10)
+        self.report_btn = QPushButton("✓  완료 · 리포트")
         self.report_btn.setObjectName("Primary")
-        self.report_btn.clicked.connect(self.save_report)
+        self.report_btn.clicked.connect(self._go_complete)
         head.addWidget(self.report_btn)
         lay.addLayout(head)
 
@@ -660,10 +673,20 @@ class MainWindow(QMainWindow):
         self.unread_banner.setVisible(False)
         lay.addWidget(self.unread_banner)
 
-        body = QHBoxLayout()
+        self.result_views = QStackedWidget()
+        self.result_views.addWidget(self._build_table_view())
+        self.result_views.addWidget(self._build_group_view())
+        self.result_views.addWidget(self._build_cards_view())
+        lay.addWidget(self.result_views, 1)
+        self._set_result_view("table")
+        return w
+
+    def _build_table_view(self) -> QWidget:
+        w = QWidget()
+        body = QHBoxLayout(w)
+        body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(14)
 
-        # 좌측 위험도 필터
         filt = _card()
         filt.setFixedWidth(180)
         fl = QVBoxLayout(filt)
@@ -687,7 +710,6 @@ class MainWindow(QMainWindow):
         fl.addStretch()
         body.addWidget(filt)
 
-        # 중앙 표
         center = QVBoxLayout()
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["위험도", "파일 / 위치", "검출 항목", "검출값(마스킹)"])
@@ -709,7 +731,6 @@ class MainWindow(QMainWindow):
         center.addLayout(bar)
         body.addLayout(center, 1)
 
-        # 우측 미리보기
         self.preview = _card()
         self.preview.setFixedWidth(300)
         pv = QVBoxLayout(self.preview)
@@ -743,9 +764,56 @@ class MainWindow(QMainWindow):
         pv.addWidget(self.pv_ctx)
         pv.addStretch()
         body.addWidget(self.preview)
-
-        lay.addLayout(body, 1)
         return w
+
+    def _build_group_view(self) -> QWidget:
+        sc = QScrollArea()
+        sc.setWidgetResizable(True)
+        sc.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        self.group_box = QVBoxLayout(inner)
+        self.group_box.setContentsMargins(0, 0, 0, 0)
+        self.group_box.setSpacing(12)
+        self.group_box.addStretch()
+        sc.setWidget(inner)
+        return sc
+
+    def _build_cards_view(self) -> QWidget:
+        sc = QScrollArea()
+        sc.setWidgetResizable(True)
+        sc.setFrameShape(QFrame.NoFrame)
+        inner = QWidget()
+        self.cards_cols = QHBoxLayout(inner)
+        self.cards_cols.setContentsMargins(0, 0, 0, 0)
+        self.cards_cols.setSpacing(14)
+        self._cards_col_box = {}
+        for sev in ("높음", "중간", "낮음"):
+            colw = QVBoxLayout()
+            colw.setSpacing(10)
+            head = QLabel()
+            self._style_sev_label(head, sev)
+            colw.addWidget(head)
+            box = QVBoxLayout()
+            box.setSpacing(10)
+            colw.addLayout(box)
+            colw.addStretch()
+            self._cards_col_box[sev] = box
+            cont = QWidget()
+            cont.setLayout(colw)
+            self.cards_cols.addWidget(cont, 1)
+        sc.setWidget(inner)
+        return sc
+
+    def _set_result_view(self, key: str):
+        idx = {"table": 0, "group": 1, "cards": 2}[key]
+        self.result_views.setCurrentIndex(idx)
+        for k, b in self._view_seg.items():
+            on = k == key
+            b.setChecked(on)
+            b.setStyleSheet(
+                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:6px 13px;"
+                "background:%s;color:%s;font-weight:700;font-size:12.5px;}"
+                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
 
     def _mini_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
@@ -756,6 +824,91 @@ class MainWindow(QMainWindow):
         for k, b in self._sev_buttons.items():
             b.setChecked(k == key)
         self._apply_filter()
+
+    # -------------------------------------------------------- 완료
+    def _build_complete(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(36, 28, 36, 28)
+        lay.setSpacing(12)
+        lay.addStretch()
+        badge = QLabel("✓")
+        badge.setFixedSize(72, 72)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setStyleSheet("background:#E7F6EC; color:#15A34A; border-radius:36px; font-size:34px; font-weight:800;")
+        h = QHBoxLayout(); h.addStretch(); h.addWidget(badge); h.addStretch()
+        lay.addLayout(h)
+        t = QLabel("점검 완료")
+        t.setAlignment(Qt.AlignCenter)
+        t.setStyleSheet("font-size:24px; font-weight:800;")
+        lay.addWidget(t)
+        s = QLabel("점검을 마쳤어요.")
+        s.setAlignment(Qt.AlignCenter)
+        s.setStyleSheet("color:#565E6C; font-size:13px;")
+        lay.addWidget(s)
+
+        stats = QHBoxLayout()
+        stats.setSpacing(14)
+        self._complete_stats = {}
+        for key, icon in [("mask", "🙈 마스킹"), ("quarantine", "🔒 격리"), ("delete", "🗑 완전삭제")]:
+            c = _card()
+            cv = QVBoxLayout(c)
+            cv.setContentsMargins(20, 16, 20, 16)
+            cv.setAlignment(Qt.AlignCenter)
+            num = QLabel("0")
+            num.setAlignment(Qt.AlignCenter)
+            num.setStyleSheet("font-size:30px; font-weight:800;")
+            cv.addWidget(num)
+            lb = QLabel(icon); lb.setAlignment(Qt.AlignCenter)
+            lb.setStyleSheet("color:#565E6C; font-size:12px;")
+            cv.addWidget(lb)
+            self._complete_stats[key] = num
+            stats.addWidget(c, 1)
+        lay.addLayout(stats)
+
+        cmp = _card()
+        cl = QHBoxLayout(cmp)
+        cl.setContentsMargins(20, 14, 20, 14)
+        cl.addStretch()
+        b1 = QVBoxLayout()
+        l1 = QLabel("점검 전"); l1.setAlignment(Qt.AlignCenter); l1.setStyleSheet("color:#8B92A0; font-size:11px;")
+        b1.addWidget(l1)
+        self.cmp_before = QLabel(); self.cmp_before.setAlignment(Qt.AlignCenter)
+        b1.addWidget(self.cmp_before)
+        cl.addLayout(b1)
+        arr = QLabel("›"); arr.setStyleSheet("font-size:18px; color:#8B92A0; margin:0 16px;")
+        cl.addWidget(arr)
+        b2 = QVBoxLayout()
+        l2 = QLabel("점검 후"); l2.setAlignment(Qt.AlignCenter); l2.setStyleSheet("color:#8B92A0; font-size:11px;")
+        b2.addWidget(l2)
+        self.cmp_after = QLabel(); self.cmp_after.setAlignment(Qt.AlignCenter)
+        b2.addWidget(self.cmp_after)
+        cl.addLayout(b2)
+        cl.addStretch()
+        lay.addWidget(cmp)
+
+        foot = QHBoxLayout()
+        foot.addStretch()
+        rep = QPushButton("📄  진단 리포트 저장(PDF)")
+        rep.setObjectName("Primary")
+        rep.clicked.connect(self.save_report)
+        foot.addWidget(rep)
+        home = QPushButton("홈으로")
+        home.setObjectName("Ghost")
+        home.clicked.connect(lambda: (self._nav_buttons["dashboard"].click()))
+        foot.addWidget(home)
+        foot.addStretch()
+        lay.addLayout(foot)
+        lay.addStretch()
+        return w
+
+    def _go_complete(self):
+        for key, lbl in self._complete_stats.items():
+            lbl.setText(str(self._action_counts.get(key, 0)))
+        before = getattr(self, "_scan_grade", "안전")
+        self._style_sev_label(self.cmp_before, {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(before, "낮음"))
+        self._style_sev_label(self.cmp_after, {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(before, "낮음"))
+        self.stack.setCurrentWidget(self.complete)
 
     # -------------------------------------------------------- 격리함
     def _build_quarantine(self) -> QWidget:
@@ -1091,6 +1244,8 @@ class MainWindow(QMainWindow):
         skipped = summary.skipped
         total = summary.total_findings
         grade = summary.risk_grade
+        self._scan_grade = grade
+        self._action_counts = {"mask": 0, "quarantine": 0, "delete": 0}
         # 위험도별 카운트
         bysev = {"높음": 0, "중간": 0, "낮음": 0}
         for r in summary.file_results:
@@ -1173,6 +1328,123 @@ class MainWindow(QMainWindow):
                 self.row_index.append((Path(r.path), f))
         if hasattr(self, "_sev_buttons"):
             self._apply_filter()
+        self._populate_group(results)
+        self._populate_cards(results)
+
+    def _clear_layout(self, box, keep_stretch=False):
+        while box.count():
+            it = box.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        if keep_stretch:
+            box.addStretch()
+
+    def _icon_btn(self, glyph, tip, slot) -> QPushButton:
+        b = QPushButton(glyph)
+        b.setToolTip(tip)
+        b.setFixedSize(30, 30)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setStyleSheet("QPushButton{border:1px solid #E7E9EE;border-radius:8px;background:#fff;}"
+                        "QPushButton:hover{background:#F7F8FA;}")
+        b.clicked.connect(slot)
+        return b
+
+    def _populate_group(self, results):
+        # 기존 제거(끝 stretch 유지)
+        while self.group_box.count():
+            it = self.group_box.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        for r in results:
+            if not r.findings:
+                continue
+            path = Path(r.path)
+            top_sev = max((f.severity.value for f in r.findings),
+                          key=lambda s: {"높음": 3, "중간": 2, "낮음": 1}.get(s, 0))
+            card = _card(shadow=False)
+            cv = QVBoxLayout(card)
+            cv.setContentsMargins(16, 12, 16, 12)
+            cv.setSpacing(8)
+            hd = QHBoxLayout()
+            fn = QLabel(f"🗂  {path.name}")
+            fn.setStyleSheet("font-weight:800; font-size:14px;")
+            hd.addWidget(fn)
+            chip = QLabel(); self._style_sev_label(chip, top_sev)
+            hd.addWidget(chip)
+            hd.addWidget(QLabel(f"{len(r.findings)}건"))
+            hd.addStretch()
+            hd.addWidget(self._icon_btn("🔒", "전체 격리", lambda _=False, p=path: self._do_action("quarantine", p, [])))
+            hd.addWidget(self._icon_btn("🗑", "삭제", lambda _=False, p=path, fs=list(r.findings): self._do_action("delete", p, fs)))
+            cv.addLayout(hd)
+            pl = QLabel(str(path)); pl.setStyleSheet("color:#8B92A0; font-size:11px;")
+            cv.addWidget(pl)
+            for f in r.findings:
+                roww = QHBoxLayout()
+                k = QLabel(f.info_type); k.setStyleSheet("font-size:12.5px;")
+                k.setFixedWidth(120)
+                roww.addWidget(k)
+                mv = QLabel(f.masked)
+                mv.setStyleSheet("font-family:'JetBrains Mono',monospace; font-size:12px; color:#14161C;")
+                roww.addWidget(mv, 1)
+                ln = QLabel(f"line {f.line}"); ln.setStyleSheet("color:#8B92A0; font-size:11px;")
+                roww.addWidget(ln)
+                c2 = QLabel(); self._style_sev_label(c2, f.severity.value)
+                roww.addWidget(c2)
+                roww.addWidget(self._icon_btn("🙈", "마스킹", lambda _=False, p=path, fs=list(r.findings): self._do_action("mask", p, fs)))
+                roww.addWidget(self._icon_btn("🔒", "격리", lambda _=False, p=path: self._do_action("quarantine", p, [])))
+                cv.addLayout(roww)
+            self.group_box.addWidget(card)
+        self.group_box.addStretch()
+
+    def _populate_cards(self, results):
+        for box in self._cards_col_box.values():
+            self._clear_layout(box)
+        border = {"높음": "#E11D2A", "중간": "#E08600", "낮음": "#15A34A"}
+        for r in results:
+            path = Path(r.path)
+            for f in r.findings:
+                card = QFrame()
+                card.setStyleSheet(
+                    f"QFrame{{background:#fff;border:1px solid #E7E9EE;border-left:3px solid "
+                    f"{border.get(f.severity.value,'#E7E9EE')};border-radius:12px;}}")
+                cv = QVBoxLayout(card)
+                cv.setContentsMargins(14, 12, 14, 12)
+                cv.setSpacing(4)
+                nm = QLabel(f"  {f.info_type}")
+                nm.setStyleSheet("font-weight:800; font-size:13px;")
+                cv.addWidget(nm)
+                mv = QLabel(f.masked)
+                mv.setStyleSheet("font-family:'JetBrains Mono',monospace; font-size:13px;")
+                cv.addWidget(mv)
+                fnm = QLabel(path.name)
+                fnm.setStyleSheet("color:#8B92A0; font-size:11px;")
+                cv.addWidget(fnm)
+                ab = QHBoxLayout()
+                ab.addStretch()
+                ab.addWidget(self._icon_btn("🙈", "마스킹", lambda _=False, p=path, fs=list(r.findings): self._do_action("mask", p, fs)))
+                ab.addWidget(self._icon_btn("🔒", "격리", lambda _=False, p=path: self._do_action("quarantine", p, [])))
+                ab.addWidget(self._icon_btn("🗑", "삭제", lambda _=False, p=path, fs=list(r.findings): self._do_action("delete", p, fs)))
+                cv.addLayout(ab)
+                self._cards_col_box.get(f.severity.value, self._cards_col_box["낮음"]).addWidget(card)
+
+    def _do_action(self, action: str, path: Path, findings: list):
+        from . import actions as A
+        if action == "mask":
+            r = A.mask_in_text_file(path, findings)
+            ok = r.status == "success"
+        elif action == "quarantine":
+            ok = A.quarantine_file(path).status == "success"
+        else:  # delete
+            text, conf = QInputDialog.getText(
+                self, "완전 삭제 확인",
+                f"{path.name} 을(를) 복구 불가능하게 삭제합니다.\n확인을 위해 '삭제'를 입력하세요:")
+            if not conf or text.strip() != "삭제":
+                return
+            ok = A.secure_delete(path, confirmed=True).status == "success"
+        if ok:
+            self._action_counts[action] += 1
+        self._render_recent()
+        QMessageBox.information(self, "조치", "완료되었습니다." if ok else "처리하지 못했습니다.")
 
     # -------------------------------------------------------- 필터/미리보기
     def _apply_filter(self, *_):
@@ -1222,6 +1494,7 @@ class MainWindow(QMainWindow):
             return
         from .actions import mask_in_text_file
         ok = sum(1 for p, fs in g.items() if mask_in_text_file(p, fs).status == "success")
+        self._action_counts["mask"] += ok
         QMessageBox.information(self, "마스킹 완료", f"{ok}개 파일의 마스킹 사본을 생성했습니다.")
         self._render_recent()
 
@@ -1231,6 +1504,7 @@ class MainWindow(QMainWindow):
             return
         from .actions import quarantine_file
         ok = sum(1 for p in g if quarantine_file(p).status == "success")
+        self._action_counts["quarantine"] += ok
         QMessageBox.information(self, "격리 완료", f"{ok}개 파일을 암호화 격리함으로 옮겼습니다.")
         self._render_recent()
 
@@ -1246,6 +1520,7 @@ class MainWindow(QMainWindow):
             return
         from .actions import secure_delete
         done = sum(1 for p in g if secure_delete(p, confirmed=True).status == "success")
+        self._action_counts["delete"] += done
         QMessageBox.information(self, "삭제 완료", f"{done}개 파일을 영구 삭제했습니다.")
         self._render_recent()
 
