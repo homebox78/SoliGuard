@@ -247,6 +247,42 @@ def _mini_stat(icon: str, label: str, value: str) -> QWidget:
     return w
 
 
+def _seg_btn_qss(on: bool) -> str:
+    """통합 세그먼트 컨트롤 버튼 스타일(선택=흰 pill / 비선택=투명)."""
+    if on:
+        return ("QPushButton{background:#FFFFFF; color:#B0123F; border:none;"
+                "border-radius:7px; padding:5px 13px; font-weight:700; font-size:12px;}")
+    return ("QPushButton{background:transparent; color:#565E6C; border:none;"
+            "border-radius:7px; padding:5px 13px; font-weight:700; font-size:12px;}"
+            "QPushButton:hover{color:#14161C;}")
+
+
+def _make_segment(items, slot):
+    """연한 회색 컨테이너 안의 통합 세그먼트. items=[(key,label,icon)].
+
+    반환: (컨테이너 QFrame, {key: QPushButton}). 스타일은 _style_segment로 갱신."""
+    cont = QFrame(); cont.setObjectName("Seg")
+    cont.setStyleSheet("QFrame#Seg{background:#EFF1F4; border:1px solid #E7E9EE; border-radius:9px;}")
+    h = QHBoxLayout(cont); h.setContentsMargins(3, 3, 3, 3); h.setSpacing(2)
+    btns = {}
+    for key, label, icon in items:
+        b = QPushButton(" " + label); b.setCheckable(True)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setIconSize(QSize(14, 14))
+        b.clicked.connect(lambda _=False, k=key: slot(k))
+        b._seg_icon = icon
+        btns[key] = b
+        h.addWidget(b)
+    return cont, btns
+
+
+def _style_segment(btns: dict, current: str):
+    for k, b in btns.items():
+        on = k == current
+        b.setStyleSheet(_seg_btn_qss(on))
+        b.setIcon(QIcon(icons.line_icon(b._seg_icon, 14, "#B0123F" if on else "#565E6C")))
+
+
 # ---------------------------------------------------------------- 스캔 워커
 def _bucket_of(info_type: str) -> str:
     if info_type in ("주민등록번호", "외국인등록번호", "신분증 이미지", "실고객 샘플"):
@@ -908,20 +944,11 @@ class MainWindow(QMainWindow):
         hrow.addStretch()
         seglbl = QLabel("위험 표현"); seglbl.setStyleSheet("color:#8B92A0; font-size:12px;")
         hrow.addWidget(seglbl)
-        hrow.addSpacing(4)
-        seg = QHBoxLayout(); seg.setSpacing(6); seg.setContentsMargins(0, 0, 0, 0)
-        self._hero_seg = {}
-        for key, label, ic in [("donut", " 도넛", "refresh"), ("shield", " 방패", "shield"),
-                               ("numeric", " 숫자", "bolt")]:
-            b = QPushButton(label)
-            b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setIcon(QIcon(icons.line_icon(ic, 14, "#565E6C")))
-            b.setIconSize(QSize(14, 14))
-            b.clicked.connect(lambda _=False, k=key: self._set_hero(k))
-            self._hero_seg[key] = b
-            seg.addWidget(b)
-        hrow.addLayout(seg)
+        hrow.addSpacing(6)
+        cont, self._hero_seg = _make_segment(
+            [("donut", "도넛", "refresh"), ("shield", "방패", "shield"),
+             ("numeric", "숫자", "bolt")], self._set_hero)
+        hrow.addWidget(cont)
         ol.addLayout(hrow)
 
         # 히어로 카드
@@ -1043,13 +1070,7 @@ class MainWindow(QMainWindow):
         idx = {"donut": 0, "shield": 1, "numeric": 2}[key]
         self.hero_stack.setCurrentIndex(idx)
         self._hero_key = key
-        for k, b in self._hero_seg.items():
-            on = k == key
-            b.setChecked(on)
-            b.setStyleSheet(
-                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:5px 11px;"
-                "background:%s;color:%s;font-weight:700;font-size:12px;}"
-                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+        _style_segment(self._hero_seg, key)
 
     def _render_recent(self):
         while self.recent_box.count():
@@ -1208,18 +1229,10 @@ class MainWindow(QMainWindow):
         seglbl.setStyleSheet("color:#8B92A0; font-size:12px;")
         head.addWidget(seglbl, alignment=Qt.AlignBottom)
         head.addSpacing(4)
-        sseg = QHBoxLayout(); sseg.setSpacing(6); sseg.setContentsMargins(0, 0, 0, 0)
-        self._scan_seg = {}
-        for key, label, icn in [("linear", "막대형", "list"),
-                                ("radial", "원형", "refresh"), ("minimal", "미니멀", "bolt")]:
-            b = QPushButton("  " + label); b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setIcon(QIcon(icons.line_icon(icn, 14, "#565E6C")))
-            b.clicked.connect(lambda _=False, k=key: self._set_scan_style(k))
-            self._scan_seg[key] = b
-            sseg.addWidget(b)
-        sw = QWidget(); sw.setLayout(sseg)
-        head.addWidget(sw, 0, Qt.AlignBottom)
+        scont, self._scan_seg = _make_segment(
+            [("linear", "막대형", "list"), ("radial", "원형", "refresh"),
+             ("minimal", "미니멀", "bolt")], self._set_scan_style)
+        head.addWidget(scont, 0, Qt.AlignBottom)
         lay.addLayout(head)
 
         # 연출 스택
@@ -1356,13 +1369,7 @@ class MainWindow(QMainWindow):
     def _set_scan_style(self, key: str):
         idx = {"linear": 0, "radial": 1, "minimal": 2}[key]
         self.scan_stack.setCurrentIndex(idx)
-        for k, b in self._scan_seg.items():
-            on = k == key
-            b.setChecked(on)
-            b.setStyleSheet(
-                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:5px 11px;"
-                "background:%s;color:%s;font-weight:700;font-size:12px;}"
-                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+        _style_segment(self._scan_seg, key)
 
     def _toggle_pause(self):
         if not self.worker:
@@ -1387,19 +1394,10 @@ class MainWindow(QMainWindow):
         head.addWidget(back)
         head.addStretch()
         # 뷰 세그먼트
-        vseg = QHBoxLayout(); vseg.setSpacing(6); vseg.setContentsMargins(0, 0, 0, 0)
-        self._view_seg = {}
-        for key, label, ic in [("table", " 테이블", "list"), ("group", " 그룹", "layers"),
-                               ("cards", " 카드", "grid")]:
-            b = QPushButton(label)
-            b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setIcon(QIcon(icons.line_icon(ic, 14, "#565E6C")))
-            b.setIconSize(QSize(14, 14))
-            b.clicked.connect(lambda _=False, k=key: self._set_result_view(k))
-            self._view_seg[key] = b
-            vseg.addWidget(b)
-        head.addLayout(vseg)
+        vcont, self._view_seg = _make_segment(
+            [("table", "테이블", "list"), ("group", "그룹", "layers"),
+             ("cards", "카드", "grid")], self._set_result_view)
+        head.addWidget(vcont)
         head.addSpacing(12)
         self.report_btn = QPushButton("  완료 · 리포트")
         self.report_btn.setObjectName("Primary")
@@ -1615,13 +1613,7 @@ class MainWindow(QMainWindow):
     def _set_result_view(self, key: str):
         idx = {"table": 0, "group": 1, "cards": 2}[key]
         self.result_views.setCurrentIndex(idx)
-        for k, b in self._view_seg.items():
-            on = k == key
-            b.setChecked(on)
-            b.setStyleSheet(
-                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:6px 13px;"
-                "background:%s;color:%s;font-weight:700;font-size:12.5px;}"
-                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+        _style_segment(self._view_seg, key)
 
     def _mini_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
