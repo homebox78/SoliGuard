@@ -584,6 +584,52 @@ class DeleteConfirmDialog(QDialog):
         self.del_btn.setEnabled(text.strip() == "삭제")
 
 
+class NoticeDialog(QDialog):
+    """앱 디자인 알림 모달 — 네이티브 QMessageBox 대체.
+
+    kind: info | success | warn | error (아이콘·색이 달라진다)."""
+
+    _KIND = {
+        "info":    ("info",        "#565E6C", "#F1F2F4"),
+        "success": ("checkCircle", "#15A34A", "#E7F6EC"),
+        "warn":    ("alert",       "#E08600", "#FEF3E0"),
+        "error":   ("alert",       "#B0123F", "#FDEAEA"),
+    }
+
+    def __init__(self, parent, title, message, kind="info"):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(380)
+        icon, color, bg = self._KIND.get(kind, self._KIND["info"])
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(24, 22, 24, 18)
+        lay.setSpacing(16)
+
+        hd = QHBoxLayout(); hd.setSpacing(13)
+        ic = QLabel(); ic.setFixedSize(44, 44); ic.setAlignment(Qt.AlignCenter)
+        ic.setStyleSheet(f"background:{bg}; border-radius:11px;")
+        ic.setPixmap(icons.line_icon(icon, 22, color, 2))
+        hd.addWidget(ic, 0, Qt.AlignTop)
+        tc = QVBoxLayout(); tc.setSpacing(4)
+        t = QLabel(title); t.setWordWrap(True)
+        t.setStyleSheet("font-size:15px; font-weight:800;")
+        tc.addWidget(t)
+        m = QLabel(message); m.setWordWrap(True)
+        m.setStyleSheet("color:#565E6C; font-size:12.5px;")
+        tc.addWidget(m)
+        hd.addLayout(tc, 1)
+        lay.addLayout(hd)
+
+        foot = QHBoxLayout(); foot.addStretch()
+        ok = QPushButton("확인"); ok.setObjectName("Primary")
+        ok.setMinimumWidth(96); ok.setCursor(Qt.PointingHandCursor)
+        ok.clicked.connect(self.accept)
+        foot.addWidget(ok)
+        lay.addLayout(foot)
+
+
 _GRADE_META = {
     "위험": ("#B0123F", "#FDEAEA"),
     "주의": ("#E08600", "#FEF3E0"),
@@ -718,7 +764,7 @@ class ReportPreviewDialog(QDialog):
             if self.parent():
                 self.parent()._toast(f"진단서를 저장했어요 — {Path(path).name}")
         except ReportError as e:
-            QMessageBox.warning(self, "리포트 생성 실패", str(e))
+            NoticeDialog(self, "리포트 생성 실패", str(e), "error").exec()
 
 
 # ---------------------------------------------------------------- 메인 윈도우
@@ -729,7 +775,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("SoliGuard")
         self.setWindowIcon(icons.app_icon())
-        self.resize(1180, 760)
+        self.resize(1003, 646)  # 기본 창 크기(이전 1180×760의 85%)
         self.cfg = cfg
         self.profile = getattr(cfg, "profile", None) or "개발자"
         self.profiles = list(getattr(cfg, "profiles", None) or [self.profile])
@@ -831,7 +877,7 @@ class MainWindow(QMainWindow):
         qbtn = self._nav_buttons["quarantine"]
         self._q_badge = QLabel("0", qbtn)
         self._q_badge.setStyleSheet(
-            f"background:{BRAND['brand']}; color:#fff; border-radius:9px;"
+            f"background:{BRAND['brand']}; color:#fff; border-radius:3px;"
             "font-size:10.5px; font-weight:700; padding:1px 7px;")
         self._q_badge.hide()
         lay.addWidget(navwrap)
@@ -1860,15 +1906,18 @@ class MainWindow(QMainWindow):
         pl.setStyleSheet("color:#8B92A0; font-size:11px;")
         info.addWidget(pl)
         h.addLayout(info, 1)
-        # 유형 + 시간
-        meta_col = QVBoxLayout(); meta_col.setSpacing(2)
-        it = QLabel(meta.get("info_type") or "기타")
+        # 유형 + 시간 (한 줄)
+        typ = meta.get("info_type") or "기타"
+        tm_s = self._rel_time(meta.get("quarantined_at", ""))
+        meta_row = QHBoxLayout(); meta_row.setSpacing(6)
+        it = QLabel(typ)
         it.setStyleSheet("font-size:12.5px; color:#14161C;")
-        meta_col.addWidget(it)
-        tm = QLabel(self._rel_time(meta.get("quarantined_at", "")))
-        tm.setStyleSheet("color:#8B92A0; font-size:11px;")
-        meta_col.addWidget(tm)
-        h.addLayout(meta_col)
+        meta_row.addWidget(it)
+        if tm_s:
+            tm = QLabel("· " + tm_s)
+            tm.setStyleSheet("color:#8B92A0; font-size:11px;")
+            meta_row.addWidget(tm)
+        h.addLayout(meta_row)
         # 심각도 칩 — 값이 있을 때만 표시(없으면 빈 회색 박스 방지)
         sev = meta.get("severity") or None
         if sev:
@@ -2241,7 +2290,7 @@ class MainWindow(QMainWindow):
         ur.addLayout(uc); ur.addStretch()
         upd = QPushButton("업데이트 확인")
         upd.setObjectName("Ghost")
-        upd.clicked.connect(lambda: QMessageBox.information(self, "업데이트", "최신 버전을 사용 중입니다."))
+        upd.clicked.connect(lambda: self._notice("업데이트", "최신 버전을 사용 중입니다."))
         ur.addWidget(upd)
         gl.addLayout(ur)
         gl.addStretch()
@@ -2287,7 +2336,7 @@ class MainWindow(QMainWindow):
     def _export_audit(self):
         from . import actions
         if not actions.AUDIT_LOG.exists():
-            QMessageBox.information(self, "감사 로그", "아직 기록이 없습니다.")
+            self._notice("감사 로그", "아직 기록이 없습니다.")
             return
         path, _ = QFileDialog.getSaveFileName(self, "감사 로그 내보내기", "audit.csv", "CSV (*.csv)")
         if not path:
@@ -2301,9 +2350,9 @@ class MainWindow(QMainWindow):
                 for e in rows:
                     wr.writerow([e.get("ts", ""), _ACTION_KO.get(e.get("action", ""), e.get("action", "")),
                                  e.get("path", ""), e.get("result", ""), e.get("user", "")])
-            QMessageBox.information(self, "감사 로그", f"내보냈습니다: {path}")
+            self._success("감사 로그", f"내보냈습니다: {path}")
         except OSError as ex:
-            QMessageBox.warning(self, "내보내기 실패", str(ex))
+            self._warn("내보내기 실패", str(ex))
 
     def _save_settings(self):
         try:
@@ -2319,9 +2368,9 @@ class MainWindow(QMainWindow):
             cfg.schedule = ScheduleConfig(enabled=enabled, frequency=freq)
             cfg.save()
             self.cfg = cfg
-            QMessageBox.information(self, "설정", "설정을 저장했습니다.")
+            self._success("설정", "설정을 저장했습니다.")
         except Exception as e:
-            QMessageBox.warning(self, "설정 저장 실패", str(e))
+            self._warn("설정 저장 실패", str(e))
 
     def _style_sev_label(self, lbl, sev):
         # 소프트 pill(테두리 없음). 가로 레이아웃에서 세로로 늘어나지 않도록
@@ -2591,7 +2640,7 @@ class MainWindow(QMainWindow):
     def _begin_scan(self):
         folders = [p for b, p in self._sc_folders if b.isChecked()]
         if not folders:
-            QMessageBox.information(self, "SoliGuard", "스캔할 폴더를 한 곳 이상 선택하세요.")
+            self._warn("스캔 폴더 필요", "스캔할 폴더를 한 곳 이상 선택하세요.")
             return
         self.stack.setCurrentWidget(self.scanning)
         self.progress_bar.setValue(0)
@@ -2727,8 +2776,8 @@ class MainWindow(QMainWindow):
         self._render_recent()
 
         if summary.total_findings == 0 and skipped == 0:
-            QMessageBox.information(
-                self, "점검 완료",
+            self._success(
+                "점검 완료",
                 f"안전합니다 — 점검한 {summary.scanned}개 파일에서 위험을 찾지 못했어요.")
             self.stack.setCurrentWidget(self.dashboard)
         else:
@@ -2952,7 +3001,7 @@ class MainWindow(QMainWindow):
 
     def _require(self, grouped):
         if not grouped:
-            QMessageBox.information(self, "SoliGuard", "처리할 행을 선택하세요.")
+            self._warn("선택 필요", "처리할 행을 선택하세요.")
             return False
         return True
 
@@ -2963,7 +3012,7 @@ class MainWindow(QMainWindow):
         from .actions import mask_in_text_file
         ok = sum(1 for p, fs in g.items() if mask_in_text_file(p, fs).status == "success")
         self._action_counts["mask"] += ok
-        QMessageBox.information(self, "마스킹 완료", f"{ok}개 파일의 마스킹 사본을 생성했습니다.")
+        self._success("마스킹 완료", f"{ok}개 파일의 마스킹 사본을 생성했습니다.")
         self._render_recent()
 
     def _action_quarantine(self):
@@ -2973,7 +3022,7 @@ class MainWindow(QMainWindow):
         from .actions import quarantine_file
         ok = sum(1 for p in g if quarantine_file(p).status == "success")
         self._action_counts["quarantine"] += ok
-        QMessageBox.information(self, "격리 완료", f"{ok}개 파일을 암호화 격리함으로 옮겼습니다.")
+        self._success("격리 완료", f"{ok}개 파일을 암호화 격리함으로 옮겼습니다.")
         self._render_recent()
 
     def _action_delete(self):
@@ -2999,7 +3048,7 @@ class MainWindow(QMainWindow):
     def _mark_false_positive(self):
         sel = [r for r in getattr(self, "tbl_rows", []) if r["chk"].isChecked()]
         if not sel:
-            QMessageBox.information(self, "SoliGuard", "오탐으로 표시할 행을 선택하세요.")
+            self._warn("선택 필요", "오탐으로 표시할 행을 선택하세요.")
             return
         from .config import AppConfig
         cfg = self.cfg or AppConfig.load()
@@ -3014,12 +3063,12 @@ class MainWindow(QMainWindow):
         cfg.whitelist = wl
         cfg.save()
         self.cfg = cfg
-        QMessageBox.information(self, "오탐 등록",
-                                f"{added}건을 오탐(제외)으로 등록했습니다. 다음 점검부터 제외됩니다.")
+        self._success("오탐 등록",
+                      f"{added}건을 오탐(제외)으로 등록했습니다. 다음 점검부터 제외됩니다.")
 
     def save_report(self):
         if not self.file_results:
-            QMessageBox.information(self, "SoliGuard", "먼저 점검을 실행하세요.")
+            self._warn("점검 필요", "먼저 점검을 실행하세요.")
             return
         ls = (getattr(self.cfg, "last_scan", None) or {}) if self.cfg else {}
         scanned = ls.get("scanned") or len(self.file_results)
@@ -3036,15 +3085,28 @@ class MainWindow(QMainWindow):
             key = parse_file_key(url)
             result = scan_figma_file(key, token, user_consented=consent)
         except FigmaConsentError as e:
-            QMessageBox.warning(self, "동의 필요", str(e))
+            self._warn("동의 필요", str(e))
             return
         except (FigmaApiError, ValueError) as e:
-            QMessageBox.critical(self, "Figma 검사 실패", str(e))
+            self._error("Figma 검사 실패", str(e))
             return
-        QMessageBox.information(
-            self, "Figma 검사 완료",
+        self._notice(
+            "Figma 검사 완료",
             f"'{result.file_name}'에서 텍스트 {result.text_node_count}개 검사, "
             f"위험 {len(result.findings)}건 발견")
+
+    def _notice(self, title: str, message: str, kind: str = "info"):
+        """앱 디자인 모달 알림(네이티브 QMessageBox 대체)."""
+        NoticeDialog(self, title, message, kind).exec()
+
+    def _warn(self, title: str, message: str):
+        self._notice(title, message, "warn")
+
+    def _error(self, title: str, message: str):
+        self._notice(title, message, "error")
+
+    def _success(self, title: str, message: str):
+        self._notice(title, message, "success")
 
     def _toast(self, message: str):
         from PySide6.QtCore import QTimer
