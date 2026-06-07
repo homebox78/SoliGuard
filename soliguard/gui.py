@@ -251,9 +251,15 @@ class ScanWorker(QThread):
         self.ocr_enabled = ocr_enabled
         self.user_whitelist = list(user_whitelist or [])
         self._stop = False
+        self._paused = False
 
     def stop(self):
         self._stop = True
+        self._paused = False
+
+    def toggle_pause(self) -> bool:
+        self._paused = not self._paused
+        return self._paused
 
     def run(self):
         from .detection import DetectionEngine
@@ -268,6 +274,8 @@ class ScanWorker(QThread):
         buckets = {"주민등록번호": 0, "신용카드번호": 0, "API키/DB": 0,
                    "전화·이메일": 0, "기타": 0}
         for i, fpath in enumerate(files, 1):
+            while self._paused and not self._stop:
+                self.msleep(120)
             if self._stop:
                 break
             r = scan_file(fpath, engine, ocr_enabled=self.ocr_enabled)
@@ -280,6 +288,44 @@ class ScanWorker(QThread):
                     buckets[_bucket_of(f.info_type)] += 1
             self.progress.emit(i, total, str(fpath), dict(buckets))
         self.finished_scan.emit(ScanSummary(file_results=results, scanned=scanned, skipped=skipped))
+
+
+class _ScanRing(QWidget):
+    """스캔 진행 원형 게이지(정본 06). 가운데 %·라벨·발견 건수."""
+
+    def __init__(self):
+        super().__init__()
+        self.setMinimumHeight(240)
+        self._pct = 0
+        self._found = 0
+        self._stage = "준비 중"
+
+    def set(self, pct: int, found: int, stage: str):
+        self._pct = pct; self._found = found; self._stage = stage
+        self.update()
+
+    def paintEvent(self, e):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QColor, QFont, QPainter, QPen
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        size = min(self.width(), self.height()) - 24
+        x = (self.width() - size) / 2
+        y = (self.height() - size) / 2
+        rect = QRectF(x, y, size, size)
+        pen = QPen(QColor("#F1DCE3")); pen.setWidth(16); pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen); p.drawArc(rect, 0, 360 * 16)
+        pen2 = QPen(QColor(BRAND["brand"])); pen2.setWidth(16); pen2.setCapStyle(Qt.RoundCap)
+        p.setPen(pen2); p.drawArc(rect, 90 * 16, -int(360 * 16 * self._pct / 100))
+        p.setPen(QColor("#B0123F"))
+        f = QFont(); f.setPixelSize(40); f.setBold(True); p.setFont(f)
+        p.drawText(rect, Qt.AlignCenter, f"{self._pct}%")
+        p.setPen(QColor("#565E6C"))
+        f2 = QFont(); f2.setPixelSize(13); p.setFont(f2)
+        p.drawText(QRectF(x, y + size * 0.60, size, 22), Qt.AlignCenter, self._stage)
+        p.setPen(QColor("#8B92A0")); f3 = QFont(); f3.setPixelSize(12); p.setFont(f3)
+        p.drawText(QRectF(x, y + size * 0.72, size, 20), Qt.AlignCenter, f"발견 {self._found}건")
+        p.end()
 
 
 # ---------------------------------------------------------------- 직무 팝오버
@@ -864,47 +910,42 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(w)
         lay.setContentsMargins(36, 28, 36, 28)
         lay.setSpacing(16)
-        lay.addWidget(_h1("스캔 진행 중"))
+        self._scan_log = []
+
+        # 헤더: 제목/부제(좌) + 연출 세그먼트(우)
+        head = QHBoxLayout()
+        tcol = QVBoxLayout(); tcol.setSpacing(3)
+        trow = QHBoxLayout(); trow.setSpacing(8)
+        ti = QLabel(); ti.setFixedSize(24, 24)
+        ti.setPixmap(icons.line_icon("search", 24, BRAND["brand"], 2.2))
+        trow.addWidget(ti); trow.addWidget(_h1("스캔 진행 중")); trow.addStretch()
+        tcol.addLayout(trow)
         self.scan_sub = QLabel("준비 중…")
         self.scan_sub.setStyleSheet("color:#565E6C; font-size:13px;")
-        lay.addWidget(self.scan_sub)
+        tcol.addWidget(self.scan_sub)
+        head.addLayout(tcol); head.addStretch()
+        seglbl = QLabel("연출")
+        seglbl.setStyleSheet("color:#8B92A0; font-size:12px;")
+        head.addWidget(seglbl, alignment=Qt.AlignBottom)
+        self._scan_seg = {}
+        for key, label, icn in [("linear", "막대형", "list"),
+                                ("radial", "원형", "refresh"), ("minimal", "미니멀", "bolt")]:
+            b = QPushButton("  " + label); b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setIcon(QIcon(icons.line_icon(icn, 14, "#565E6C")))
+            b.clicked.connect(lambda _=False, k=key: self._set_scan_style(k))
+            self._scan_seg[key] = b
+            head.addWidget(b, alignment=Qt.AlignBottom)
+        lay.addLayout(head)
 
-        # 단계 인디케이터
-        card = _card()
-        cl = QVBoxLayout(card)
-        cl.setContentsMargins(22, 18, 22, 18)
-        cl.setSpacing(14)
-        stage_row = QHBoxLayout()
-        stage_row.setSpacing(10)
-        self._stage_labels = []
-        for i, (icn, name) in enumerate([("folder", "파일 수집"), ("search", "내용 검사"),
-                                         ("cpu", "검증·분석")]):
-            fr = QFrame()
-            fr.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
-            h = QHBoxLayout(fr); h.setContentsMargins(12, 10, 12, 10); h.setSpacing(8)
-            il = QLabel(); il.setPixmap(icons.line_icon(icn, 16, "#8B92A0"))
-            tl = QLabel(name); tl.setStyleSheet("font-weight:700; color:#8B92A0;")
-            h.addWidget(il); h.addWidget(tl); h.addStretch()
-            self._stage_labels.append((fr, il, tl, icn))
-            stage_row.addWidget(fr, 1)
-        cl.addLayout(stage_row)
-        pr = QHBoxLayout()
-        pr.addWidget(QLabel("진행률"))
-        pr.addStretch()
-        self.pct_label = QLabel("0%")
-        self.pct_label.setStyleSheet("font-size:26px; font-weight:800; color:#B0123F;")
-        pr.addWidget(self.pct_label)
-        cl.addLayout(pr)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(14)
-        cl.addWidget(self.progress_bar)
-        self.progress_path = QLabel("준비 중...")
-        self.progress_path.setStyleSheet("color:#8B92A0; font-family:'JetBrains Mono',monospace; font-size:11.5px;")
-        cl.addWidget(self.progress_path)
-        lay.addWidget(card)
+        # 연출 스택
+        self.scan_stack = QStackedWidget()
+        self.scan_stack.addWidget(self._scan_page_linear())
+        self.scan_stack.addWidget(self._scan_page_radial())
+        self.scan_stack.addWidget(self._scan_page_minimal())
+        lay.addWidget(self.scan_stack)
 
-        # 실시간 검출 버킷
+        # 실시간 검출 버킷(공유)
         bgrid = QHBoxLayout()
         bgrid.setSpacing(12)
         self._bucket_labels = {}
@@ -917,7 +958,7 @@ class MainWindow(QMainWindow):
             t.setStyleSheet("color:#565E6C; font-size:12px; font-weight:600;")
             bcl.addWidget(t)
             v = QLabel("0")
-            v.setStyleSheet(f"font-size:26px; font-weight:800; color:#8B92A0;")
+            v.setStyleSheet("font-size:26px; font-weight:800; color:#8B92A0;")
             v.setProperty("color", color)
             self._bucket_labels[key] = v
             bcl.addWidget(v)
@@ -931,11 +972,116 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.ocr_note)
 
         lay.addStretch()
-        cancel = QPushButton("중지하고 결과 보기")
+        btnrow = QHBoxLayout(); btnrow.addStretch()
+        self.pause_btn = QPushButton("  일시정지")
+        self.pause_btn.setObjectName("Ghost")
+        self.pause_btn.setIcon(QIcon(icons.line_icon("clock", 15, "#565E6C")))
+        self.pause_btn.setCursor(Qt.PointingHandCursor)
+        self.pause_btn.clicked.connect(self._toggle_pause)
+        btnrow.addWidget(self.pause_btn)
+        cancel = QPushButton("  중지하고 결과 보기")
         cancel.setObjectName("Ghost")
+        cancel.setIcon(QIcon(icons.line_icon("check", 15, "#565E6C")))
         cancel.clicked.connect(self._cancel_scan)
-        lay.addWidget(cancel, alignment=Qt.AlignCenter)
+        btnrow.addWidget(cancel)
+        btnrow.addStretch()
+        lay.addLayout(btnrow)
+
+        self._set_scan_style("linear")
         return w
+
+    def _scan_page_linear(self) -> QWidget:
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(22, 18, 22, 18)
+        cl.setSpacing(14)
+        stage_row = QHBoxLayout(); stage_row.setSpacing(10)
+        self._stage_labels = []
+        for icn, name in [("folder", "파일 수집"), ("search", "내용 검사"), ("cpu", "검증·분석")]:
+            fr = QFrame()
+            fr.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
+            h = QHBoxLayout(fr); h.setContentsMargins(12, 10, 12, 10); h.setSpacing(8)
+            il = QLabel(); il.setPixmap(icons.line_icon(icn, 16, "#8B92A0"))
+            tl = QLabel(name); tl.setStyleSheet("font-weight:700; color:#8B92A0;")
+            h.addWidget(il); h.addWidget(tl); h.addStretch()
+            self._stage_labels.append((fr, il, tl, icn))
+            stage_row.addWidget(fr, 1)
+        cl.addLayout(stage_row)
+        pr = QHBoxLayout()
+        pr.addWidget(QLabel("진행률")); pr.addStretch()
+        self.pct_label = QLabel("0%")
+        self.pct_label.setStyleSheet("font-size:26px; font-weight:800; color:#B0123F;")
+        pr.addWidget(self.pct_label)
+        cl.addLayout(pr)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False); self.progress_bar.setFixedHeight(14)
+        cl.addWidget(self.progress_bar)
+        self.progress_path = QLabel("준비 중...")
+        self.progress_path.setStyleSheet("color:#8B92A0; font-family:'JetBrains Mono',monospace; font-size:11.5px;")
+        cl.addWidget(self.progress_path)
+        return card
+
+    def _scan_page_radial(self) -> QWidget:
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(22, 14, 22, 16)
+        self.scan_ring = _ScanRing()
+        cl.addWidget(self.scan_ring, 1)
+        self.radial_path = QLabel("준비 중...")
+        self.radial_path.setAlignment(Qt.AlignCenter)
+        self.radial_path.setStyleSheet("color:#8B92A0; font-family:'JetBrains Mono',monospace; font-size:11.5px;")
+        cl.addWidget(self.radial_path)
+        return card
+
+    def _scan_page_minimal(self) -> QWidget:
+        card = _card()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(26, 20, 26, 20)
+        cl.setSpacing(10)
+        top = QHBoxLayout()
+        self.min_pct = QLabel("0%")
+        self.min_pct.setStyleSheet("font-size:46px; font-weight:800; color:#14161C;")
+        top.addWidget(self.min_pct); top.addStretch()
+        fcol = QVBoxLayout(); fcol.setSpacing(0)
+        self.min_found = QLabel("발견 0건")
+        self.min_found.setStyleSheet("font-size:14px; font-weight:800; color:#B0123F;")
+        self.min_found.setAlignment(Qt.AlignRight)
+        fcol.addWidget(self.min_found)
+        fl = QLabel("실시간 검출"); fl.setStyleSheet("color:#8B92A0; font-size:11px;")
+        fl.setAlignment(Qt.AlignRight)
+        fcol.addWidget(fl)
+        top.addLayout(fcol)
+        cl.addLayout(top)
+        self.min_bar = QProgressBar()
+        self.min_bar.setTextVisible(False); self.min_bar.setFixedHeight(8)
+        cl.addWidget(self.min_bar)
+        self.min_log = QLabel("")
+        self.min_log.setStyleSheet(
+            "background:#14161C; color:#CBD3E1; border-radius:12px; padding:16px 18px;"
+            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:12px; line-height:1.6;")
+        self.min_log.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.min_log.setMinimumHeight(150)
+        cl.addWidget(self.min_log, 1)
+        return card
+
+    def _set_scan_style(self, key: str):
+        idx = {"linear": 0, "radial": 1, "minimal": 2}[key]
+        self.scan_stack.setCurrentIndex(idx)
+        for k, b in self._scan_seg.items():
+            on = k == key
+            b.setChecked(on)
+            b.setStyleSheet(
+                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:5px 11px;"
+                "background:%s;color:%s;font-weight:700;font-size:12px;}"
+                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+
+    def _toggle_pause(self):
+        if not self.worker:
+            return
+        paused = self.worker.toggle_pause()
+        self.pause_btn.setText("  재개" if paused else "  일시정지")
+        self.pause_btn.setIcon(QIcon(icons.line_icon(
+            "refresh" if paused else "clock", 15, "#565E6C")))
 
     # -------------------------------------------------------- 결과(3분할)
     def _build_results(self) -> QWidget:
@@ -1919,6 +2065,13 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.scanning)
         self.progress_bar.setValue(0)
         self.pct_label.setText("0%")
+        self._scan_log = []
+        self.min_pct.setText("0%"); self.min_bar.setValue(0)
+        self.min_found.setText("발견 0건"); self.min_log.setText("")
+        self.scan_ring.set(0, 0, "준비 중")
+        self.radial_path.setText("준비 중...")
+        self.pause_btn.setText("  일시정지")
+        self.pause_btn.setIcon(QIcon(icons.line_icon("clock", 15, "#565E6C")))
         for v in self._bucket_labels.values():
             v.setText("0"); v.setStyleSheet("font-size:26px; font-weight:800; color:#8B92A0;")
         ocr_enabled = self.ocr_check.isChecked() if hasattr(self, "ocr_check") else True
@@ -1934,13 +2087,17 @@ class MainWindow(QMainWindow):
 
     def _on_progress(self, done, total, path, buckets):
         pct = int(done / total * 100) if total else 100
+        found = sum(buckets.values())
+        eta = max(0, round((total - done) * 0.0015)) if total else 0
+        stage = 0 if pct < 10 else (1 if pct < 86 else 2)
+        stage_name = ["파일 수집", "내용 검사", "검증·분석"][stage]
+        # 막대형
         self.progress_bar.setMaximum(total or 1)
         self.progress_bar.setValue(done)
         self.pct_label.setText(f"{pct}%")
         self.progress_path.setText(f"검사 중  {path}")
-        self.scan_sub.setText(f"검사 {done:,} / {total:,}개 파일")
-        # 단계 강조
-        stage = 0 if pct < 10 else (1 if pct < 86 else 2)
+        self.scan_sub.setText(
+            f"{stage_name} · 검사 {done:,} / {total:,}개 · 예상 남은 시간 약 {eta}초")
         for i, (fr, il, tl, icn) in enumerate(self._stage_labels):
             if i < stage:
                 c, bg, bd = "#15A34A", "#FFFFFF", "#E7E9EE"
@@ -1951,6 +2108,18 @@ class MainWindow(QMainWindow):
             fr.setStyleSheet(f"QFrame{{background:{bg};border:1px solid {bd};border-radius:10px;}}")
             il.setPixmap(icons.line_icon(icn, 16, c))
             tl.setStyleSheet(f"font-weight:700; color:{c};")
+        # 원형
+        self.scan_ring.set(pct, found, stage_name)
+        self.radial_path.setText(str(path))
+        # 미니멀
+        self.min_pct.setText(f"{pct}%")
+        self.min_bar.setMaximum(total or 1); self.min_bar.setValue(done)
+        self.min_found.setText(f"발견 {found}건")
+        from pathlib import Path as _P
+        self._scan_log.append(_P(path).name)
+        self._scan_log = self._scan_log[-8:]
+        self.min_log.setText("\n".join(f"✓ scanned   {n}" for n in self._scan_log))
+        # 버킷(공유)
         for key, v in self._bucket_labels.items():
             n = buckets.get(key, 0)
             color = v.property("color") if n else "#8B92A0"
