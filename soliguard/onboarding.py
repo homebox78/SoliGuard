@@ -153,13 +153,14 @@ class OnboardingWizard(QDialog):
         c.setContentsMargins(34, 26, 34, 22)
         c.setSpacing(14)
 
-        # 상단: 브랜드(방패 로고 + 워드마크) + 배지
+        # 상단: solideo 로고 + 배지
         top = QHBoxLayout(); top.setSpacing(10)
-        mark = QLabel(); mark.setFixedSize(30, 30)
-        mark.setPixmap(icons.shield_pixmap(30, stroke=2, color="#FFFFFF", bg=_CRIMSON))
-        top.addWidget(mark)
-        brand = QLabel(f'솔리<span style="color:{_CRIMSON};font-weight:800;">가드</span>')
-        brand.setStyleSheet("font-size:16px; font-weight:800;")
+        _logo = icons.logo_pixmap(24, white=False)
+        if _logo is not None:
+            brand = QLabel(); brand.setPixmap(_logo)
+        else:
+            brand = QLabel(f'솔리<span style="color:{_CRIMSON};font-weight:800;">가드</span>')
+            brand.setStyleSheet("font-size:16px; font-weight:800;")
         top.addWidget(brand)
         top.addStretch()
         pill = QLabel("SoliGuard · 초기 설정")

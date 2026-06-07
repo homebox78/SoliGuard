@@ -306,21 +306,17 @@ class InstallerWizard(QWidget):
         v.setContentsMargins(20, 24, 20, 18)
         v.setSpacing(0)
 
-        # 정본 Wordmark: 앱 로고(방패) + 텍스트 락업
-        mark = QHBoxLayout(); mark.setSpacing(10); mark.setContentsMargins(0, 0, 0, 0)
-        logo = QLabel(); logo.setFixedSize(34, 34)
-        logo.setPixmap(_app_icon_pixmap(34))
-        mark.addWidget(logo)
-        lock = QVBoxLayout(); lock.setSpacing(1); lock.setContentsMargins(0, 0, 0, 0)
-        brand = QLabel('솔리<span style="color:#ffffff">가드</span>')
-        brand.setObjectName("RailBrand")
-        lock.addWidget(brand)
-        sub1 = QLabel("SoliGuard · solideo")
-        sub1.setObjectName("RailSub")
-        lock.addWidget(sub1)
-        mark.addLayout(lock); mark.addStretch()
-        v.addLayout(mark)
-        v.addSpacing(12)
+        # solideo 브랜드 로고(흰색) — 텍스트 대신 로고 이미지
+        logo_row = QHBoxLayout(); logo_row.setContentsMargins(0, 0, 0, 0)
+        logo = QLabel()
+        pm = icons.logo_pixmap(26, white=True)
+        if pm is not None:
+            logo.setPixmap(pm)
+        else:  # 폴백: 방패 + 텍스트
+            logo.setPixmap(_app_icon_pixmap(30))
+        logo_row.addWidget(logo); logo_row.addStretch()
+        v.addLayout(logo_row)
+        v.addSpacing(14)
         sub2 = QLabel("SI 실무자 개인정보 점검 도구\n· v1.0.0")
         sub2.setObjectName("RailSub")
         v.addWidget(sub2)
