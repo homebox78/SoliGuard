@@ -150,6 +150,13 @@ def build_qss(theme: str = "light") -> str:
     QTableWidget::item:hover {{ background: {t['rowHover']}; }}
     QTableWidget::item:selected {{ background: {t['rowSelected']}; color: {t['text']}; }}
 
+    /* ---- 진행바 ---- */
+    QProgressBar {{
+        border: none; border-radius: 7px; background: {t['surfaceAlt']};
+        height: 14px; text-align: center; color: {t['text2']};
+    }}
+    QProgressBar::chunk {{ background: {b['brand']}; border-radius: 7px; }}
+
     QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
     QScrollBar::handle:vertical {{ background: #CDD2DB; border-radius: 5px; min-height: 30px; }}
     QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}

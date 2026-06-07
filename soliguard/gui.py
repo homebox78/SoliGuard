@@ -531,7 +531,7 @@ class MainWindow(QMainWindow):
 
         lay.addStretch()
 
-        trust = QLabel("🔒  데이터는 이 PC 안에서만 처리됩니다")
+        trust = QLabel("데이터는 이 PC 안에서만 처리됩니다")
         trust.setStyleSheet("color:#8B92A0; font-size:11px; padding:8px 16px 4px;")
         lay.addWidget(trust)
 
@@ -796,12 +796,16 @@ class MainWindow(QMainWindow):
         stage_row = QHBoxLayout()
         stage_row.setSpacing(10)
         self._stage_labels = []
-        for i, (ic, name) in enumerate([("📂", "파일 수집"), ("🔍", "내용 검사"), ("🧮", "검증·분석")]):
-            s = QLabel(f"  {ic}  {name}")
-            s.setObjectName("Card")
-            s.setStyleSheet("background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:10px 12px; color:#8B92A0; font-weight:700;")
-            self._stage_labels.append(s)
-            stage_row.addWidget(s, 1)
+        for i, (icn, name) in enumerate([("folder", "파일 수집"), ("search", "내용 검사"),
+                                         ("cpu", "검증·분석")]):
+            fr = QFrame()
+            fr.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
+            h = QHBoxLayout(fr); h.setContentsMargins(12, 10, 12, 10); h.setSpacing(8)
+            il = QLabel(); il.setPixmap(icons.line_icon(icn, 16, "#8B92A0"))
+            tl = QLabel(name); tl.setStyleSheet("font-weight:700; color:#8B92A0;")
+            h.addWidget(il); h.addWidget(tl); h.addStretch()
+            self._stage_labels.append((fr, il, tl, icn))
+            stage_row.addWidget(fr, 1)
         cl.addLayout(stage_row)
         pr = QHBoxLayout()
         pr.addWidget(QLabel("진행률"))
@@ -839,14 +843,14 @@ class MainWindow(QMainWindow):
             bgrid.addWidget(bc, 1)
         lay.addLayout(bgrid)
 
-        self.ocr_note = QLabel("🖼  이미지 분석 중 — 시간이 조금 걸릴 수 있어요")
+        self.ocr_note = QLabel("이미지 분석 중 — 시간이 조금 걸릴 수 있어요")
         self.ocr_note.setAlignment(Qt.AlignCenter)
         self.ocr_note.setStyleSheet("color:#E08600; font-size:12.5px; font-weight:600;")
         self.ocr_note.setVisible(False)
         lay.addWidget(self.ocr_note)
 
         lay.addStretch()
-        cancel = QPushButton("⏹  중지하고 결과 보기")
+        cancel = QPushButton("중지하고 결과 보기")
         cancel.setObjectName("Ghost")
         cancel.clicked.connect(self._cancel_scan)
         lay.addWidget(cancel, alignment=Qt.AlignCenter)
@@ -868,9 +872,12 @@ class MainWindow(QMainWindow):
         head.addStretch()
         # 뷰 세그먼트
         self._view_seg = {}
-        for key, label in [("table", "≣ 테이블"), ("group", "◇ 그룹"), ("cards", "▦ 카드")]:
+        for key, label, ic in [("table", " 테이블", "list"), ("group", " 그룹", "layers"),
+                               ("cards", " 카드", "grid")]:
             b = QPushButton(label)
             b.setCheckable(True)
+            b.setIcon(QIcon(icons.line_icon(ic, 14, "#565E6C")))
+            b.setIconSize(QSize(14, 14))
             b.clicked.connect(lambda _=False, k=key: self._set_result_view(k))
             self._view_seg[key] = b
             head.addWidget(b)
@@ -959,7 +966,7 @@ class MainWindow(QMainWindow):
         pv = QVBoxLayout(self.preview)
         pv.setContentsMargins(18, 18, 18, 18)
         pv.setSpacing(10)
-        pv.addWidget(self._mini_label("🔎  마스킹 미리보기"))
+        pv.addWidget(self._mini_label("마스킹 미리보기"))
         self.pv_file = QLabel("항목을 선택하세요")
         self.pv_file.setStyleSheet("font-weight:700; font-size:13.5px;")
         self.pv_file.setWordWrap(True)
@@ -1073,7 +1080,7 @@ class MainWindow(QMainWindow):
         stats = QHBoxLayout()
         stats.setSpacing(14)
         self._complete_stats = {}
-        for key, icon in [("mask", "🙈 마스킹"), ("quarantine", "🔒 격리"), ("delete", "🗑 완전삭제")]:
+        for key, icon in [("mask", "마스킹"), ("quarantine", "격리"), ("delete", "완전삭제")]:
             c = _card()
             cv = QVBoxLayout(c)
             cv.setContentsMargins(20, 16, 20, 16)
@@ -1112,7 +1119,7 @@ class MainWindow(QMainWindow):
 
         foot = QHBoxLayout()
         foot.addStretch()
-        rep = QPushButton("📄  진단 리포트 저장(PDF)")
+        rep = QPushButton("진단 리포트 저장(PDF)")
         rep.setObjectName("Primary")
         rep.clicked.connect(self.save_report)
         foot.addWidget(rep)
@@ -1570,11 +1577,11 @@ class MainWindow(QMainWindow):
         lay.addLayout(cols, 1)
 
         foot = QHBoxLayout()
-        trust = QLabel("🔒 스캔은 이 PC 안에서만 수행되며, 검출된 데이터는 외부로 전송되지 않습니다.")
+        trust = QLabel("스캔은 이 PC 안에서만 수행되며, 검출된 데이터는 외부로 전송되지 않습니다.")
         trust.setStyleSheet("color:#8B92A0; font-size:12px;")
         foot.addWidget(trust)
         foot.addStretch()
-        startb = QPushButton("🔍  스캔 시작")
+        startb = QPushButton("스캔 시작")
         startb.setObjectName("Primary")
         startb.setMinimumHeight(44)
         startb.clicked.connect(self._begin_scan)
@@ -1673,13 +1680,16 @@ class MainWindow(QMainWindow):
         self.scan_sub.setText(f"검사 {done:,} / {total:,}개 파일")
         # 단계 강조
         stage = 0 if pct < 10 else (1 if pct < 86 else 2)
-        for i, s in enumerate(self._stage_labels):
+        for i, (fr, il, tl, icn) in enumerate(self._stage_labels):
             if i < stage:
-                s.setStyleSheet("background:#fff;border:1px solid #E7E9EE;border-radius:10px;padding:10px 12px;color:#15A34A;font-weight:700;")
+                c, bg, bd = "#15A34A", "#FFFFFF", "#E7E9EE"
             elif i == stage:
-                s.setStyleSheet("background:#FCEFF3;border:1px solid #F6D2DE;border-radius:10px;padding:10px 12px;color:#B0123F;font-weight:700;")
+                c, bg, bd = "#B0123F", "#FCEFF3", "#F6D2DE"
             else:
-                s.setStyleSheet("background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;padding:10px 12px;color:#8B92A0;font-weight:700;")
+                c, bg, bd = "#8B92A0", "#F7F8FA", "#E7E9EE"
+            fr.setStyleSheet(f"QFrame{{background:{bg};border:1px solid {bd};border-radius:10px;}}")
+            il.setPixmap(icons.line_icon(icn, 16, c))
+            tl.setStyleSheet(f"font-weight:700; color:{c};")
         for key, v in self._bucket_labels.items():
             n = buckets.get(key, 0)
             color = v.property("color") if n else "#8B92A0"
@@ -1753,7 +1763,7 @@ class MainWindow(QMainWindow):
         if summary.total_findings == 0 and skipped == 0:
             QMessageBox.information(
                 self, "점검 완료",
-                f"🟢 안전합니다 — 점검한 {summary.scanned}개 파일에서 위험을 찾지 못했어요.")
+                f"안전합니다 — 점검한 {summary.scanned}개 파일에서 위험을 찾지 못했어요.")
             self.stack.setCurrentWidget(self.dashboard)
         else:
             self.stack.setCurrentWidget(self.results)
@@ -2089,12 +2099,23 @@ def _read_audit_tail(n: int) -> list:
 
 
 def main() -> int:
+    import os
     app = QApplication(sys.argv)
-    fonts.load_fonts(app)
+    fam = fonts.load_fonts(app)
     app.setWindowIcon(icons.app_icon())
     app.setStyleSheet(build_qss("light"))
+    app.setFont(app.font())  # 스타일시트 적용 후 앱 폰트 재확정
     win = MainWindow()
+    win.resize(1180, 760)
     win.show()
+    shot = os.environ.get("SOLIGUARD_SHOT")
+    if shot:
+        from PySide6.QtCore import QTimer
+        def _grab():
+            win.grab().save(shot)
+            print("SHOT", fam, win.dash_sub.fontInfo().family())
+            app.quit()
+        QTimer.singleShot(400, _grab)
     return app.exec()
 
 
