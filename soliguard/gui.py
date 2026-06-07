@@ -1950,14 +1950,12 @@ class MainWindow(QMainWindow):
         tcol.addWidget(d)
         head.addLayout(tcol); head.addStretch()
         self._hist_filter = "all"
-        self._hist_seg = {}
-        for key, label in [("all", "전체"), ("scan", "스캔"), ("action", "조치")]:
-            b = QPushButton(label); b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _=False, k=key: self._set_hist_filter(k))
-            b.setMinimumHeight(36)
-            self._hist_seg[key] = b
-            head.addWidget(b, alignment=Qt.AlignVCenter)
+        seg_cont, self._hist_seg = _make_segment(
+            [("all", "전체", "list"), ("scan", "스캔", "search"),
+             ("action", "조치", "checkCircle")],
+            self._set_hist_filter)
+        head.addWidget(seg_cont, alignment=Qt.AlignVCenter)
+        head.addSpacing(8)
         exp = QPushButton("  내보내기"); exp.setObjectName("Ghost")
         exp.setMinimumHeight(36)
         exp.setIcon(QIcon(icons.line_icon("fileText", 15, "#565E6C")))
@@ -1983,12 +1981,7 @@ class MainWindow(QMainWindow):
 
     def _set_hist_filter(self, key: str):
         self._hist_filter = key
-        for k, b in self._hist_seg.items():
-            on = k == key
-            b.setStyleSheet(
-                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:5px 14px;"
-                "background:%s;color:%s;font-weight:700;font-size:12px;}"
-                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+        _style_segment(self._hist_seg, key)
         self._refresh_history()
 
     def _refresh_history(self):

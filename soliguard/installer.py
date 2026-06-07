@@ -317,8 +317,9 @@ class InstallerWizard(QWidget):
         logo_row.addWidget(logo); logo_row.addStretch()
         v.addLayout(logo_row)
         v.addSpacing(14)
-        sub2 = QLabel("SI 실무자 개인정보 점검 도구\n· v1.0.0")
-        sub2.setObjectName("RailSub")
+        sub2 = QLabel("SI 실무자 개인정보 점검 도구 · v1.0.0")
+        sub2.setWordWrap(False)
+        sub2.setStyleSheet("color:rgba(255,255,255,0.72); font-size:9.5px;")
         v.addWidget(sub2)
 
         v.addSpacing(26)
@@ -603,16 +604,18 @@ class InstallerWizard(QWidget):
         p2.drawPixmap(15, 15, chk)
         p2.end()
         badge.setPixmap(comp)
-        v.addWidget(badge); v.addSpacing(16)
+        v.addWidget(badge, 0, Qt.AlignHCenter); v.addSpacing(16)
         t = QLabel("설치가 완료되었습니다"); t.setObjectName("Title")
+        t.setAlignment(Qt.AlignHCenter)
         v.addWidget(t); v.addSpacing(8)
         body = QLabel("솔리가드가 설치되었습니다. 처음 실행하면 직무에 맞춘 초기 설정을 안내합니다.")
         body.setObjectName("Body"); body.setWordWrap(True)
+        body.setAlignment(Qt.AlignHCenter)
         v.addWidget(body); v.addSpacing(18)
         self.run_btn = self._check_card("지금 솔리가드 실행", True,
                                         lambda on: setattr(self, "run_now", on))
         self.run_btn.setMaximumWidth(360)
-        v.addWidget(self.run_btn)
+        v.addWidget(self.run_btn, 0, Qt.AlignHCenter)
         v.addStretch()
         return w
 
