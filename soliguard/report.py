@@ -59,9 +59,9 @@ def summarize_results(file_results: Sequence) -> ReportSummary:
 
 
 # 폰트/색 상수 -------------------------------------------------------------
-_GRADE_COLOR = {"안전": "#16A34A", "주의": "#D97706", "위험": "#DC2626"}
+_GRADE_COLOR = {"안전": "#16A34A", "주의": "#D97706", "위험": "#B0123F"}
 _SEV_COLOR = {
-    Severity.HIGH: "#DC2626",
+    Severity.HIGH: "#B0123F",
     Severity.MEDIUM: "#D97706",
     Severity.LOW: "#16A34A",
 }

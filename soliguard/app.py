@@ -18,7 +18,7 @@ from .config import CONFIG_FILE, DATA_DIR, AppConfig
 from .gui import MainWindow
 from .theme import build_qss
 
-GRADE_COLOR = {"safe": "#16A34A", "warn": "#D97706", "danger": "#DC2626"}
+GRADE_COLOR = {"safe": "#16A34A", "warn": "#D97706", "danger": "#B0123F"}
 GRADE_LABEL = {"safe": "안전", "warn": "주의", "danger": "위험"}
 
 

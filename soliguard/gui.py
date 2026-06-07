@@ -527,7 +527,7 @@ class DeleteConfirmDialog(QDialog):
         ic.setFixedSize(40, 40)
         ic.setAlignment(Qt.AlignCenter)
         ic.setStyleSheet("background:#FDEAEA; border-radius:10px;")
-        ic.setPixmap(icons.line_icon("trash", 20, "#E11D2A"))
+        ic.setPixmap(icons.line_icon("trash", 20, "#B0123F"))
         hd.addWidget(ic)
         tc = QVBoxLayout(); tc.setSpacing(1)
         t = QLabel("완전삭제 확인"); t.setStyleSheet("font-size:16px; font-weight:800;")
@@ -542,8 +542,8 @@ class DeleteConfirmDialog(QDialog):
         lay.addWidget(desc)
 
         for name, kind in items[:6]:
-            row = QFrame()
-            row.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
+            row = QFrame(); row.setObjectName("FileRow")
+            row.setStyleSheet("QFrame#FileRow{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
             rl = QHBoxLayout(row); rl.setContentsMargins(12, 9, 12, 9)
             fi = QLabel(); fi.setPixmap(icons.line_icon("fileText", 15, "#565E6C"))
             rl.addWidget(fi)
@@ -586,7 +586,7 @@ class DeleteConfirmDialog(QDialog):
 
 
 _GRADE_META = {
-    "위험": ("#E11D2A", "#FDEAEA"),
+    "위험": ("#B0123F", "#FDEAEA"),
     "주의": ("#E08600", "#FEF3E0"),
     "안전": ("#15A34A", "#E7F6EC"),
 }
@@ -608,8 +608,8 @@ class ReportPreviewDialog(QDialog):
         lay.setSpacing(0)
 
         # 헤더
-        hd = QFrame()
-        hd.setStyleSheet("QFrame{border-bottom:1px solid #E7E9EE;}")
+        hd = QFrame(); hd.setObjectName("RepHd")
+        hd.setStyleSheet("QFrame#RepHd{border-bottom:1px solid #E7E9EE;}")
         hh = QHBoxLayout(hd); hh.setContentsMargins(18, 12, 14, 12); hh.setSpacing(8)
         ttl = QLabel("진단서 미리보기"); ttl.setStyleSheet("font-weight:700; font-size:13.5px;")
         hh.addWidget(ttl); hh.addStretch()
@@ -1246,7 +1246,7 @@ class MainWindow(QMainWindow):
         bgrid = QHBoxLayout()
         bgrid.setSpacing(12)
         self._bucket_labels = {}
-        for key, color in [("주민등록번호", "#E11D2A"), ("신용카드번호", "#E11D2A"),
+        for key, color in [("주민등록번호", "#B0123F"), ("신용카드번호", "#B0123F"),
                            ("API키/DB", "#E08600"), ("전화·이메일", "#2563EB")]:
             bc = _card()
             bcl = QVBoxLayout(bc)
@@ -1641,7 +1641,7 @@ class MainWindow(QMainWindow):
         return lbl
 
     def _set_sev_filter(self, key: str):
-        palette = {"전체": "#565E6C", "높음": "#E11D2A", "중간": "#E08600", "낮음": "#15A34A"}
+        palette = {"전체": "#565E6C", "높음": "#B0123F", "중간": "#E08600", "낮음": "#15A34A"}
         for k, b in self._sev_buttons.items():
             on = k == key
             b.setChecked(on)
@@ -1685,7 +1685,7 @@ class MainWindow(QMainWindow):
         self._complete_stats = {}
         tiles = [("mask", "마스킹", "eyeOff", "#2563EB", "#EAF1FE"),
                  ("quarantine", "격리", "lock", BRAND["brand"], BRAND["pink50"]),
-                 ("delete", "완전삭제", "trash", "#E11D2A", "#FDEAEA")]
+                 ("delete", "완전삭제", "trash", "#B0123F", "#FDEAEA")]
         for key, label, icn, color, bg in tiles:
             c = _card()
             cv = QVBoxLayout(c)
@@ -1864,7 +1864,7 @@ class MainWindow(QMainWindow):
         # 삭제 아이콘
         dele = QPushButton(); dele.setObjectName("IconBtn")
         dele.setFixedSize(34, 34)
-        dele.setIcon(QIcon(icons.line_icon("trash", 17, "#E11D2A", 2)))
+        dele.setIcon(QIcon(icons.line_icon("trash", 17, "#B0123F", 2)))
         dele.setCursor(Qt.PointingHandCursor)
         dele.setStyleSheet("QPushButton#IconBtn{background:transparent;border:1px solid #E7E9EE;"
                            "border-radius:9px;} QPushButton#IconBtn:hover{background:#FDEAEA;border-color:#F6C4C4;}")
@@ -2826,13 +2826,13 @@ class MainWindow(QMainWindow):
     def _populate_cards(self, results):
         for box in self._cards_col_box.values():
             self._clear_layout(box)
-        border = {"높음": "#E11D2A", "중간": "#E08600", "낮음": "#15A34A"}
+        border = {"높음": "#B0123F", "중간": "#E08600", "낮음": "#15A34A"}
         for r in results:
             path = Path(r.path)
             for f in r.findings:
-                card = QFrame()
+                card = QFrame(); card.setObjectName("FindCard")
                 card.setStyleSheet(
-                    f"QFrame{{background:#fff;border:1px solid #E7E9EE;border-left:3px solid "
+                    f"QFrame#FindCard{{background:#fff;border:1px solid #E7E9EE;border-left:3px solid "
                     f"{border.get(f.severity.value,'#E7E9EE')};border-radius:12px;}}")
                 cv = QVBoxLayout(card)
                 cv.setContentsMargins(14, 12, 14, 12)

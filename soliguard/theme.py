@@ -33,7 +33,7 @@ BRAND = {
     "pink200": "#F6D2DE",
 }
 
-SEMANTIC = {"safe": "#15A34A", "warn": "#E08600", "danger": "#E11D2A"}
+SEMANTIC = {"safe": "#15A34A", "warn": "#E08600", "danger": "#B0123F"}
 
 TOKENS = {
     "light": {
@@ -59,7 +59,7 @@ GRADE_DISPLAY = {
 
 # 위험도(Severity.value) → (글자색, 배경, 테두리) 칩 색
 SEV_CHIP = {
-    "높음": ("#E11D2A", "#FDEAEA", "#F6C4C4"),
+    "높음": ("#B0123F", "#FCEFF3", "#F6D2DE"),
     "중간": ("#E08600", "#FEF3E0", "#F6DDAE"),
     "낮음": ("#15A34A", "#E7F6EC", "#BBE6C8"),
 }
@@ -90,6 +90,8 @@ def build_qss(theme: str = "light") -> str:
         font-size: 13px;
     }}
     QMainWindow, QDialog {{ background: {t['bg']}; }}
+    QToolTip {{ background: {t['text']}; color: #FFFFFF; border: none;
+        border-radius: 6px; padding: 5px 9px; font-size: 12px; }}
     /* 콘텐츠 캔버스(사이드바 우측 영역) — 시스템 기본색 노출 방지 */
     QWidget#Canvas {{ background: {t['bg']}; }}
     QStackedWidget {{ background: transparent; }}
@@ -141,7 +143,7 @@ def build_qss(theme: str = "light") -> str:
         background: {SEMANTIC['danger']}; color: #fff; border: none;
         border-radius: 10px; min-height: 38px; padding: 0 16px; font-weight: 700;
     }}
-    QPushButton#Danger:hover {{ background: #C8121E; }}
+    QPushButton#Danger:hover {{ background: {b['press']}; }}
 
     /* ---- 입력 ---- */
     QComboBox, QLineEdit {{
