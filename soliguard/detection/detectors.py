@@ -138,17 +138,18 @@ class EmailDetector(Detector):
 
 
 class AccountDetector(Detector):
-    """계좌번호(은행). 하이픈 구분 + 자릿수 기반 추정.
+    """계좌번호(은행). 하이픈 구분 + 자릿수 검증.
 
-    은행별 포맷이 다양하고 오탐이 많아 2차 검증은 느슨하게 두고,
-    검증 실패분도 낮은 신뢰도로 남긴다(keep_unverified)."""
+    은행별 포맷이 다양해 오탐이 많으므로 '검증 통과분만' 남긴다(keep_unverified=False).
+    짧은 숫자열(예: 12-34-5678)이 계좌로 잘못 잡히던 무더기 오탐을 방지한다."""
 
     name = "account"
     info_type = "계좌번호"
     severity = Severity.MEDIUM
-    keep_unverified = True
+    keep_unverified = False
 
-    _pat = re.compile(r"(?<![\d-])\d{2,6}-\d{2,6}-\d{1,6}(?:-\d{1,6})?(?![\d-])")
+    # 3그룹(하이픈 2개) 형태만, 첫 그룹 2~4자리(은행 계좌 형태)
+    _pat = re.compile(r"(?<![\d-])\d{2,4}-\d{2,6}-\d{2,6}(?:-\d{1,6})?(?![\d-])")
 
     @property
     def pattern(self) -> re.Pattern[str]:
@@ -156,7 +157,8 @@ class AccountDetector(Detector):
 
     def validate(self, raw: str) -> bool:
         d = V.digits_only(raw)
-        return 10 <= len(d) <= 14
+        # 11~14자리만 계좌로 인정(10자리는 사업자번호·전화와 충돌해 제외)
+        return 11 <= len(d) <= 14 and len(set(d)) > 2
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)

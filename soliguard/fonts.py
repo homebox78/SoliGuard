@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 FAMILY = "Pretendard"
-_WEIGHTS = ("Regular", "Medium", "SemiBold", "Bold")
+_WEIGHTS = ("Thin", "Light", "Regular", "Medium", "SemiBold", "Bold", "ExtraBold")
 _loaded_family: str | None = None
 
 
