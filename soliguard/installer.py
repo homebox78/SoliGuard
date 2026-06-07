@@ -33,7 +33,7 @@ STEPS = ["환영", "사용권 계약", "설치 위치", "구성요소", "설치"
 def _qss(fam: str) -> str:
     b = BRAND
     return f"""
-    * {{ font-family: '{fam}'; color: {T['text']}; }}
+    QWidget {{ color: {T['text']}; }}
     #Win {{ background: {T['surface']}; border-radius: 12px; }}
     #Titlebar {{ border-bottom: 1px solid {T['border']}; }}
     #TbTitle {{ color: {T['text2']}; font-size: 12.5px; font-weight: 600; }}
@@ -44,7 +44,7 @@ def _qss(fam: str) -> str:
     #Rail {{ border-top-left-radius: 12px; border-bottom-left-radius: 12px; }}
     #RailBrand {{ color: #fff; font-size: 17px; font-weight: 800; }}
     #RailSub {{ color: rgba(255,255,255,0.72); font-size: 11px; }}
-    #RailFoot {{ color: rgba(255,255,255,0.7); font-size: 11px; }}
+    #RailFoot {{ color: rgba(255,255,255,0.7); font-size: 12px; }}
 
     #Title {{ font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }}
     #H2 {{ font-size: 19px; font-weight: 800; }}
@@ -72,7 +72,7 @@ def _qss(fam: str) -> str:
     QLineEdit#Fld:focus {{ border-color: {b['brand']}; }}
 
     QPushButton#ChkCard {{ background: #fff; border: 1px solid {T['border']}; border-radius: 12px;
-        text-align: left; padding: 13px 15px; }}
+        text-align: left; padding: 0; }}
     QPushButton#ChkCard:hover {{ border-color: {T['borderStrong']}; }}
     QPushButton#ChkCard:checked {{ border: 1px solid {b['brand']}; background: {b['pink50']}; }}
 
@@ -102,6 +102,25 @@ def _ic(name, size=18, color=T["text2"], stroke=2.0):
     lb.setPixmap(icons.line_icon(name, size, color, stroke))
     lb.setFixedSize(size, size)
     return lb
+
+
+def _app_icon_pixmap(size: int = 34) -> QPixmap:
+    """정본 AppIcon: 크림슨 그라데이션 라운드 + 흰색 shieldCheck."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QLinearGradient, QBrush
+    pm = QPixmap(size, size); pm.fill(Qt.transparent)
+    p = QPainter(pm); p.setRenderHint(QPainter.Antialiasing, True)
+    g = QLinearGradient(0, 0, size * 0.5, size)
+    g.setColorAt(0, QColor("#C7164A")); g.setColorAt(0.42, QColor("#B0123F"))
+    g.setColorAt(1, QColor("#7E0C30"))
+    p.setPen(Qt.NoPen); p.setBrush(QBrush(g))
+    r = size * 0.23
+    p.drawRoundedRect(QRectF(0, 0, size, size), r, r)
+    chk = icons.line_icon("shieldCheck", round(size * 0.58), "#FFFFFF", 2.1)
+    off = (size - chk.width()) // 2
+    p.drawPixmap(off, off, chk)
+    p.end()
+    return pm
 
 
 def _box_pixmap(on: bool, size: int = 20) -> QPixmap:
@@ -287,13 +306,21 @@ class InstallerWizard(QWidget):
         v.setContentsMargins(20, 24, 20, 18)
         v.setSpacing(0)
 
-        brand = QLabel("솔리가드")
+        # 정본 Wordmark: 앱 로고(방패) + 텍스트 락업
+        mark = QHBoxLayout(); mark.setSpacing(10); mark.setContentsMargins(0, 0, 0, 0)
+        logo = QLabel(); logo.setFixedSize(34, 34)
+        logo.setPixmap(_app_icon_pixmap(34))
+        mark.addWidget(logo)
+        lock = QVBoxLayout(); lock.setSpacing(1); lock.setContentsMargins(0, 0, 0, 0)
+        brand = QLabel('솔리<span style="color:#ffffff">가드</span>')
         brand.setObjectName("RailBrand")
-        v.addWidget(brand)
+        lock.addWidget(brand)
         sub1 = QLabel("SoliGuard · solideo")
         sub1.setObjectName("RailSub")
-        v.addWidget(sub1)
-        v.addSpacing(10)
+        lock.addWidget(sub1)
+        mark.addLayout(lock); mark.addStretch()
+        v.addLayout(mark)
+        v.addSpacing(12)
         sub2 = QLabel("SI 실무자 개인정보 점검 도구\n· v1.0.0")
         sub2.setObjectName("RailSub")
         v.addWidget(sub2)
@@ -503,14 +530,16 @@ class InstallerWizard(QWidget):
         b = QPushButton(); b.setObjectName("ChkCard")
         b.setCheckable(True); b.setChecked(self.opts[key])
         b.setCursor(Qt.PointingHandCursor)
-        h = QHBoxLayout(b); h.setContentsMargins(15, 11, 15, 11); h.setSpacing(12)
+        b.setMinimumHeight(66)
+        h = QHBoxLayout(b); h.setContentsMargins(15, 13, 15, 13); h.setSpacing(12)
         box = QLabel(); box.setFixedSize(20, 20)
         box.setPixmap(_box_pixmap(self.opts[key]))
-        h.addWidget(box)
+        h.addWidget(box, 0, Qt.AlignTop)
         ic_lab = _ic(ic, 18, BRAND["brand"] if self.opts[key] else T["text3"], 2)
-        h.addWidget(ic_lab)
-        tv = QVBoxLayout(); tv.setSpacing(1)
+        h.addWidget(ic_lab, 0, Qt.AlignTop)
+        tv = QVBoxLayout(); tv.setSpacing(4); tv.setContentsMargins(0, 0, 0, 0)
         l1 = QLabel(t1); l1.setStyleSheet("font-size:13.5px; font-weight:700;")
+        l1.setMinimumHeight(20)
         tv.addWidget(l1)
         l2 = QLabel(t2); l2.setStyleSheet(f"font-size:12px; color:{T['text2']};")
         tv.addWidget(l2)
