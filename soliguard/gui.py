@@ -549,6 +549,143 @@ class DeleteConfirmDialog(QDialog):
         self.del_btn.setEnabled(text.strip() == "삭제")
 
 
+_GRADE_META = {
+    "위험": ("#E11D2A", "#FDEAEA"),
+    "주의": ("#E08600", "#FEF3E0"),
+    "안전": ("#15A34A", "#E7F6EC"),
+}
+
+
+class ReportPreviewDialog(QDialog):
+    """진단서 미리보기(정본 13). 저장 시 PDF 발급."""
+
+    def __init__(self, parent, file_results, profiles, scanned, grade, counts):
+        super().__init__(parent)
+        self.setWindowTitle("진단서 미리보기")
+        self.setModal(True)
+        self.setMinimumSize(580, 640)
+        self._file_results = file_results
+        self._profiles = profiles
+        self.saved = False
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        # 헤더
+        hd = QFrame()
+        hd.setStyleSheet("QFrame{border-bottom:1px solid #E7E9EE;}")
+        hh = QHBoxLayout(hd); hh.setContentsMargins(18, 12, 14, 12); hh.setSpacing(8)
+        ttl = QLabel("진단서 미리보기"); ttl.setStyleSheet("font-weight:700; font-size:13.5px;")
+        hh.addWidget(ttl); hh.addStretch()
+        save = QPushButton("  저장"); save.setObjectName("Primary")
+        save.setIcon(QIcon(icons.line_icon("download", 14, "#fff")))
+        save.setCursor(Qt.PointingHandCursor)
+        save.clicked.connect(self._save)
+        hh.addWidget(save)
+        x = QPushButton("✕"); x.setFixedSize(32, 32)
+        x.setStyleSheet(
+            "QPushButton{background:transparent;border:none;color:#8B92A0;font-size:15px;}"
+            "QPushButton:hover{color:#14161C;}")
+        x.setCursor(Qt.PointingHandCursor); x.clicked.connect(self.reject)
+        hh.addWidget(x)
+        lay.addWidget(hd)
+
+        # 종이(스크롤)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea{background:#EEF0F3;} QScrollArea>QWidget>QWidget{background:#EEF0F3;}")
+        host = QWidget(); hv = QVBoxLayout(host)
+        hv.setContentsMargins(22, 22, 22, 22)
+        paper = QFrame(); paper.setObjectName("Paper")
+        paper.setStyleSheet("QFrame#Paper{background:#fff; border:1px solid #E7E9EE; border-radius:6px;}")
+        pv = QVBoxLayout(paper); pv.setContentsMargins(0, 0, 0, 0); pv.setSpacing(0)
+        # 크림슨 헤더
+        ph = QFrame(); ph.setObjectName("RepHead")
+        ph.setStyleSheet(f"QFrame#RepHead{{background:{BRAND['brand']}; border-top-left-radius:6px; border-top-right-radius:6px;}}")
+        phl = QHBoxLayout(ph); phl.setContentsMargins(22, 16, 22, 16); phl.setSpacing(10)
+        sh = QLabel(); sh.setPixmap(icons.line_icon("shieldCheck", 20, "#fff")); sh.setFixedSize(20, 20)
+        phl.addWidget(sh)
+        pt = QLabel("솔리가드 개인정보 점검 진단서")
+        pt.setStyleSheet("color:#fff; font-weight:800; font-size:15px; background:transparent;")
+        phl.addWidget(pt); phl.addStretch()
+        pv.addWidget(ph)
+        body = QVBoxLayout(); body.setContentsMargins(22, 18, 22, 20); body.setSpacing(0)
+        from datetime import datetime
+        now = datetime.now()
+        fmt = f"{now.year}-{now.month:02d}-{now.day:02d} {now.hour:02d}:{now.minute:02d}"
+        total = sum(len(r.findings) for r in file_results)
+        handled = sum(counts.values())
+        # 메타 표
+        meta = QGridLayout(); meta.setHorizontalSpacing(10); meta.setVerticalSpacing(4)
+        def _mc(text, c3=False):
+            l = QLabel(text)
+            l.setStyleSheet(("color:#8B92A0;" if c3 else "color:#565E6C;") + " font-size:12px;")
+            return l
+        meta.addWidget(_mc("점검 일시", True), 0, 0); meta.addWidget(_mc(fmt), 0, 1)
+        meta.addWidget(_mc("직무 프로파일", True), 0, 2); meta.addWidget(_mc(", ".join(profiles)), 0, 3)
+        meta.addWidget(_mc("검사 파일", True), 1, 0); meta.addWidget(_mc(f"{scanned:,}개"), 1, 1)
+        meta.addWidget(_mc("처리 건수", True), 1, 2); meta.addWidget(_mc(f"{handled}건"), 1, 3)
+        meta.setColumnStretch(1, 1); meta.setColumnStretch(3, 1)
+        body.addLayout(meta)
+        body.addSpacing(14)
+        # 등급 배너
+        gcolor, gbg = _GRADE_META.get(grade, _GRADE_META["안전"])
+        banner = QFrame(); banner.setObjectName("RepBanner")
+        banner.setStyleSheet(f"QFrame#RepBanner{{background:{gbg}; border-radius:8px;}}")
+        bh = QHBoxLayout(banner); bh.setContentsMargins(14, 12, 14, 12)
+        bl = QLabel(f"종합 위험 등급: {grade}")
+        bl.setStyleSheet(f"color:{gcolor}; font-weight:800; font-size:14px; background:transparent;")
+        bh.addWidget(bl); bh.addStretch()
+        br = QLabel(f"마스킹 {counts.get('mask',0)} · 격리 {counts.get('quarantine',0)} · 삭제 {counts.get('delete',0)}")
+        br.setStyleSheet("color:#565E6C; font-size:12px; background:transparent;")
+        bh.addWidget(br)
+        body.addWidget(banner)
+        body.addSpacing(16)
+        dt = QLabel('검출 상세 <span style="color:#8B92A0;font-weight:400;">(개인정보는 마스킹되어 표시됩니다)</span>')
+        dt.setStyleSheet("font-weight:700; font-size:12.5px;")
+        body.addWidget(dt)
+        body.addSpacing(8)
+        for r in file_results:
+            if not r.findings:
+                continue
+            fl = QLabel(f"📄 {r.path}  ({len(r.findings)}건)")
+            fl.setStyleSheet("font-weight:600; font-size:11.5px;")
+            fl.setWordWrap(True)
+            body.addWidget(fl)
+            for f in r.findings:
+                c = SEV_CHIP.get(f.severity.value, ("#8B92A0",))[0]
+                ln = f"  (line {f.line})" if getattr(f, "line", 0) else ""
+                fd = QLabel(f"[{f.severity.value}] {f.info_type}: {f.masked}{ln}")
+                fd.setStyleSheet(f"color:{c}; font-size:11px; font-family:'JetBrains Mono','D2Coding',monospace; padding-left:12px;")
+                fd.setWordWrap(True)
+                body.addWidget(fd)
+            body.addSpacing(8)
+        note = QLabel(
+            "※ 본 진단서는 개인정보보호법 제21조·제24조·제29조 이행 점검 및 발주처 보안 감사 증빙용으로 활용됩니다.\n"
+            "※ 본 점검은 사용자 PC 내에서 수행되었으며, 검출된 데이터는 외부로 전송되지 않았습니다.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color:#8B92A0; font-size:10.5px; border-top:1px solid #E7E9EE; padding-top:12px;")
+        body.addSpacing(6); body.addWidget(note)
+        pv.addLayout(body)
+        hv.addWidget(paper)
+        scroll.setWidget(host)
+        lay.addWidget(scroll, 1)
+
+    def _save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "리포트 저장", "soliguard_report.pdf", "PDF (*.pdf)")
+        if not path:
+            return
+        try:
+            generate_pdf_report(self._file_results, ", ".join(self._profiles), Path(path))
+            self.saved = True
+            self.accept()
+            if self.parent():
+                self.parent()._toast(f"진단서를 저장했어요 — {Path(path).name}")
+        except ReportError as e:
+            QMessageBox.warning(self, "리포트 생성 실패", str(e))
+
+
 # ---------------------------------------------------------------- 메인 윈도우
 class MainWindow(QMainWindow):
     scan_finished = Signal(str)
@@ -2818,15 +2955,13 @@ class MainWindow(QMainWindow):
         if not self.file_results:
             QMessageBox.information(self, "SoliGuard", "먼저 점검을 실행하세요.")
             return
-        path, _ = QFileDialog.getSaveFileName(
-            self, "리포트 저장", "soliguard_report.pdf", "PDF (*.pdf)")
-        if not path:
-            return
-        try:
-            generate_pdf_report(self.file_results, ", ".join(self.profiles), Path(path))
-            QMessageBox.information(self, "리포트 저장", f"저장됨: {path}")
-        except ReportError as e:
-            QMessageBox.warning(self, "리포트 생성 실패", str(e))
+        ls = (getattr(self.cfg, "last_scan", None) or {}) if self.cfg else {}
+        scanned = ls.get("scanned") or len(self.file_results)
+        grade = getattr(self, "_scan_grade", ls.get("grade", "안전"))
+        dlg = ReportPreviewDialog(
+            self, self.file_results, self.profiles, scanned, grade,
+            dict(self._action_counts))
+        dlg.exec()
 
     def run_figma_scan(self, url, token, consent):
         from .figma_scan import (
