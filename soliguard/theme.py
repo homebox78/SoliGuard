@@ -37,7 +37,7 @@ SEMANTIC = {"safe": "#15A34A", "warn": "#E08600", "danger": "#B0123F"}
 
 TOKENS = {
     "light": {
-        "bg": "#F3F4F7", "surface": "#FFFFFF", "surfaceAlt": "#F7F8FA",
+        "bg": "#FFFFFF", "surface": "#FFFFFF", "surfaceAlt": "#F7F8FA",
         "border": "#E7E9EE", "borderStrong": "#D6DAE2",
         "text": "#14161C", "text2": "#565E6C", "text3": "#8B92A0",
         "rowHover": "#F7F8FA", "rowSelected": "#FCEFF3",

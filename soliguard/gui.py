@@ -1521,9 +1521,10 @@ class MainWindow(QMainWindow):
         dv.addWidget(self.pv_type)
         self.pv_value = QLabel("")
         self.pv_value.setAlignment(Qt.AlignCenter)
+        self.pv_value.setWordWrap(True)
         self.pv_value.setStyleSheet(
-            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:18px;"
-            " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:14px;")
+            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:15px; line-height:1.5;"
+            " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:16px 12px;")
         dv.addWidget(self.pv_value)
         ctxlbl = QLabel("검출 위치 (마스킹됨)")
         ctxlbl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
