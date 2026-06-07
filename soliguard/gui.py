@@ -426,7 +426,7 @@ class RolePopover(QDialog):
         self.selected = list(profiles)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 16)
-        lay.setSpacing(9)
+        lay.setSpacing(8)
 
         thead = QHBoxLayout(); thead.setSpacing(8)
         title = QLabel("직무 프로파일")
@@ -465,34 +465,34 @@ class RolePopover(QDialog):
         b = QPushButton(); b.setObjectName("ChkCard")
         b.setCheckable(True); b.setChecked(on)
         b.setCursor(Qt.PointingHandCursor)
-        b.setMinimumHeight(62)
+        b.setMinimumHeight(54)
         b.setStyleSheet(
             "QPushButton#ChkCard{background:#fff;border:1px solid #E7E9EE;"
-            "border-radius:12px;text-align:left;padding:0;}"
+            "border-radius:11px;text-align:left;padding:0;}"
             "QPushButton#ChkCard:hover{border-color:#D6DAE2;}"
             f"QPushButton#ChkCard:checked{{border:1px solid {BRAND['brand']};"
             f"background:{BRAND['pink50']};}}")
-        h = QHBoxLayout(b); h.setContentsMargins(13, 11, 13, 11); h.setSpacing(12)
-        chk = QLabel(); chk.setFixedSize(20, 20); chk.setPixmap(_checkbox_pixmap(on))
+        h = QHBoxLayout(b); h.setContentsMargins(12, 8, 12, 8); h.setSpacing(11)
+        chk = QLabel(); chk.setFixedSize(18, 18); chk.setPixmap(_checkbox_pixmap(on, 18))
         h.addWidget(chk, 0, Qt.AlignVCenter)
         ic_name = icons.ROLE_ICON.get(role, "user")
-        ibox = QLabel(); ibox.setFixedSize(34, 34)
-        ibox.setPixmap(_icon_box_pixmap(ic_name, on))
+        ibox = QLabel(); ibox.setFixedSize(30, 30)
+        ibox.setPixmap(_icon_box_pixmap(ic_name, on, 30))
         h.addWidget(ibox, 0, Qt.AlignVCenter)
-        col = QVBoxLayout(); col.setSpacing(2); col.setContentsMargins(0, 0, 0, 0)
+        col = QVBoxLayout(); col.setSpacing(1); col.setContentsMargins(0, 0, 0, 0)
         nm = QLabel(role)
-        nm.setStyleSheet(f"font-weight:700; font-size:13.5px;"
+        nm.setStyleSheet(f"font-weight:700; font-size:13px;"
                          f"color:{BRAND['brand'] if on else '#14161C'};")
         col.addWidget(nm)
         ds = QLabel(PROFILE_DESC.get(role, ""))
-        ds.setStyleSheet("color:#565E6C; font-size:12px;")
+        ds.setStyleSheet("color:#565E6C; font-size:11.5px;")
         col.addWidget(ds)
         h.addLayout(col, 1)
 
         def toggle(checked, r=role, cb=chk, ib=ibox, name=nm, icn=ic_name):
-            cb.setPixmap(_checkbox_pixmap(checked))
-            ib.setPixmap(_icon_box_pixmap(icn, checked))
-            name.setStyleSheet(f"font-weight:700; font-size:13.5px;"
+            cb.setPixmap(_checkbox_pixmap(checked, 18))
+            ib.setPixmap(_icon_box_pixmap(icn, checked, 30))
+            name.setStyleSheet(f"font-weight:700; font-size:13px;"
                                f"color:{BRAND['brand'] if checked else '#14161C'};")
             self._refresh_count()
         b.toggled.connect(toggle)
@@ -1491,31 +1491,51 @@ class MainWindow(QMainWindow):
         pv.setContentsMargins(18, 18, 18, 18)
         pv.setSpacing(10)
         pv.addWidget(self._mini_label("마스킹 미리보기"))
-        self.pv_file = QLabel("항목을 선택하세요")
+
+        # 빈 상태(선택 전)
+        self.pv_empty = QWidget()
+        ev = QVBoxLayout(self.pv_empty); ev.setContentsMargins(0, 30, 0, 0); ev.setSpacing(10)
+        eic = QLabel(); eic.setAlignment(Qt.AlignCenter)
+        eic.setPixmap(icons.line_icon("eyeOff", 30, "#C9CFDA", 1.8))
+        ev.addWidget(eic)
+        et = QLabel("선택한 항목이 없습니다")
+        et.setAlignment(Qt.AlignCenter); et.setStyleSheet("font-weight:700; font-size:13px; color:#8B92A0;")
+        ev.addWidget(et)
+        es = QLabel("왼쪽 목록에서 행을 클릭하면\n마스킹 결과가 표시됩니다")
+        es.setAlignment(Qt.AlignCenter); es.setStyleSheet("color:#B0B6C2; font-size:11.5px;")
+        ev.addWidget(es); ev.addStretch()
+        pv.addWidget(self.pv_empty)
+
+        # 상세(선택 시)
+        self.pv_detail = QWidget()
+        dv = QVBoxLayout(self.pv_detail); dv.setContentsMargins(0, 0, 0, 0); dv.setSpacing(10)
+        self.pv_file = QLabel("")
         self.pv_file.setStyleSheet("font-weight:700; font-size:13.5px;")
         self.pv_file.setWordWrap(True)
-        pv.addWidget(self.pv_file)
+        dv.addWidget(self.pv_file)
         self.pv_path = QLabel("")
         self.pv_path.setStyleSheet("color:#8B92A0; font-size:11.5px;")
         self.pv_path.setWordWrap(True)
-        pv.addWidget(self.pv_path)
+        dv.addWidget(self.pv_path)
         self.pv_type = QLabel("")
-        pv.addWidget(self.pv_type)
+        dv.addWidget(self.pv_type)
         self.pv_value = QLabel("")
         self.pv_value.setAlignment(Qt.AlignCenter)
         self.pv_value.setStyleSheet(
             "font-family:'JetBrains Mono','D2Coding',monospace; font-size:18px;"
             " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:14px;")
-        pv.addWidget(self.pv_value)
+        dv.addWidget(self.pv_value)
         ctxlbl = QLabel("검출 위치 (마스킹됨)")
         ctxlbl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
-        pv.addWidget(ctxlbl)
+        dv.addWidget(ctxlbl)
         self.pv_ctx = QLabel("")
         self.pv_ctx.setWordWrap(True)
         self.pv_ctx.setStyleSheet(
             "font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#CBD3E1;"
             " background:#1B1E25; border-radius:10px; padding:12px;")
-        pv.addWidget(self.pv_ctx)
+        dv.addWidget(self.pv_ctx)
+        self.pv_detail.setVisible(False)
+        pv.addWidget(self.pv_detail)
         pv.addStretch()
         body.addWidget(self.preview)
         outer.addLayout(body, 1)
@@ -2727,6 +2747,10 @@ class MainWindow(QMainWindow):
         self._populate_cards(results)
         if hasattr(self, "tbl_all"):
             self.tbl_all.setChecked(False)
+        # 미리보기 빈 상태로 초기화
+        if hasattr(self, "pv_empty"):
+            self.pv_empty.setVisible(True)
+            self.pv_detail.setVisible(False)
         self._set_sev_filter("전체")
 
     def _clear_layout(self, box, keep_stretch=False):
@@ -2880,6 +2904,8 @@ class MainWindow(QMainWindow):
             self.tbl_count.setText(f"{shown}건")
 
     def _show_preview(self, path, f):
+        self.pv_empty.setVisible(False)
+        self.pv_detail.setVisible(True)
         self.pv_file.setText(path.name)
         self.pv_path.setText(f"{path}  ·  line {f.line}")
         color, bg, line = SEV_CHIP.get(f.severity.value, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
