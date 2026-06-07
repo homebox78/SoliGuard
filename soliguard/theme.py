@@ -93,7 +93,9 @@ def build_qss(theme: str = "light") -> str:
     /* 콘텐츠 캔버스(사이드바 우측 영역) — 시스템 기본색 노출 방지 */
     QWidget#Canvas {{ background: {t['bg']}; }}
     QStackedWidget {{ background: transparent; }}
-    QScrollArea {{ background: transparent; }}
+    QScrollArea {{ background: transparent; border: none; }}
+    /* 스크롤 viewport 투명화 — 빈 영역에서 시스템 기본색(누런) 노출 방지 */
+    QScrollArea > QWidget {{ background: transparent; }}
     QLabel {{ background: transparent; }}
 
     /* ---- 사이드바 (흰색) ---- */

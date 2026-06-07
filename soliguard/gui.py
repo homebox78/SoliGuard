@@ -731,6 +731,10 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.dashboard)
         self._set_hero("donut")
         self._refresh_dashboard()
+        # 모든 스크롤 viewport 투명화 — 빈 영역에 시스템/팔레트 배경(누런·회색 박스) 노출 방지
+        for sa in self.findChildren(QScrollArea):
+            sa.viewport().setAutoFillBackground(False)
+            sa.viewport().setStyleSheet("background: transparent;")
 
     # -------------------------------------------------------- 사이드바
     def _build_sidebar(self) -> QWidget:
@@ -823,11 +827,12 @@ class MainWindow(QMainWindow):
         self._role_value.setStyleSheet("font-size:13px; font-weight:700;")
         rc.addWidget(self._role_value)
         cl.addLayout(rc, 1)
-        cl.addWidget(QLabel("›"))
-        btn = QPushButton(chip)  # 투명 클릭 영역
-        btn.setStyleSheet("background:transparent; border:none;")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.clicked.connect(self._open_role_popover)
+        arrow = QLabel("›"); arrow.setStyleSheet("color:#8B92A0; font-size:14px;")
+        cl.addWidget(arrow)
+        # 칩 전체를 클릭 가능하게: 자식은 마우스 투과 + 칩이 클릭 처리
+        chip.setCursor(Qt.PointingHandCursor)
+        for _c in (av, self._role_caption, self._role_value, arrow):
+            _c.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         chip.mousePressEvent = lambda e: self._open_role_popover()
         wrap = QWidget()
         wl = QVBoxLayout(wrap)
@@ -2289,14 +2294,15 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "설정 저장 실패", str(e))
 
     def _style_sev_label(self, lbl, sev):
+        # 소프트 pill(테두리 없음) — 버튼처럼 보이지 않게 낮은 높이
         if sev is None:
-            lbl.setStyleSheet("background:#F1F2F4; color:#8B92A0; border:1px solid #E7E9EE;"
-                              "border-radius:10px; padding:2px 9px; font-weight:700; font-size:11px;")
+            lbl.setStyleSheet("background:#F1F2F4; color:#8B92A0; border:none;"
+                              "border-radius:9px; padding:1px 9px; font-weight:700; font-size:11px;")
             return
-        color, bg, line = SEV_CHIP.get(sev, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
+        color, bg, _line = SEV_CHIP.get(sev, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
         lbl.setText("● " + sev)
-        lbl.setStyleSheet(f"background:{bg}; color:{color}; border:1px solid {line};"
-                          "border-radius:10px; padding:2px 9px; font-weight:700; font-size:11px;")
+        lbl.setStyleSheet(f"background:{bg}; color:{color}; border:none;"
+                          "border-radius:9px; padding:1px 9px; font-weight:700; font-size:11px;")
 
     # -------------------------------------------------------- 스캔 설정
     def _build_scanconfig(self) -> QWidget:
