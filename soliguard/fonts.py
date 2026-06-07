@@ -53,7 +53,11 @@ def load_fonts(app=None) -> str:
 
     if app is not None:
         f = QFont(_loaded_family, 10)
-        f.setStyleStrategy(QFont.PreferAntialias)
+        # Pretendard 는 약한 힌팅의 매끄러운 렌더링에 맞춰 설계됨.
+        # Windows 기본(강한 힌팅)으로는 글자가 뭉툭해져 맑은고딕처럼 보이므로
+        # 힌팅을 끄고 안티앨리어스 품질을 우선해 시안(웹) 렌더링에 맞춘다.
+        f.setStyleStrategy(QFont.PreferAntialias | QFont.PreferQuality)
+        f.setHintingPreference(QFont.PreferNoHinting)
         app.setFont(f)
         # 패밀리가 'Pretendard'가 아닐 수도 있으니 QSS도 함께 일치시키도록 노출
         app.setProperty("appFontFamily", _loaded_family)
