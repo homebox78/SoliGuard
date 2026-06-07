@@ -257,7 +257,10 @@ def _make_segment(items, slot):
     """연한 회색 컨테이너 안의 통합 세그먼트. items=[(key,label,icon)].
 
     반환: (컨테이너 QFrame, {key: QPushButton}). 스타일은 _style_segment로 갱신."""
+    from PySide6.QtWidgets import QSizePolicy
     cont = QFrame(); cont.setObjectName("Seg")
+    # 부모 행 높이만큼 세로로 늘어나지 않게 고정 → 상하좌우 여백 동일(3px)
+    cont.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
     cont.setStyleSheet("QFrame#Seg{background:#EFF1F4; border:1px solid #E7E9EE; border-radius:9px;}")
     h = QHBoxLayout(cont); h.setContentsMargins(3, 3, 3, 3); h.setSpacing(2)
     btns = {}
