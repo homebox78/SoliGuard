@@ -6,10 +6,20 @@ Qt 비의존 순수 모듈이라 단위 테스트 가능.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 __all__ = [
     "TOKENS", "BRAND", "SEMANTIC", "build_qss",
     "GRADE_DISPLAY", "grade_color", "severity_color", "SEV_CHIP",
 ]
+
+# QSS image url 용 자산 경로(forward-slash). 없으면 빈 문자열로 graceful.
+_ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
+
+
+def _asset_url(name: str) -> str:
+    p = _ASSET_DIR / name
+    return p.as_posix() if p.exists() else ""
 
 # Brand — solideo crimson (tokens.css)
 BRAND = {
@@ -133,14 +143,43 @@ def build_qss(theme: str = "light") -> str:
         border-radius: 8px; padding: 7px 10px; color: {t['text']};
         selection-background-color: {b['brand']}; selection-color: #fff;
     }}
-    QComboBox::drop-down {{ border: none; width: 22px; }}
+    QComboBox::drop-down {{ border: none; width: 26px; }}
+    QComboBox::down-arrow {{ image: url("{_asset_url('chevron-down.svg')}"); width: 13px; height: 13px; }}
     QComboBox QAbstractItemView {{
         background: {t['surface']}; color: {t['text']};
-        border: 1px solid {t['border']};
+        border: 1px solid {t['border']}; border-radius: 8px; padding: 4px;
         selection-background-color: {b['pink50']}; selection-color: {b['brand']};
         outline: 0;
     }}
     QCheckBox {{ color: {t['text']}; spacing: 8px; }}
+    QCheckBox::indicator {{
+        width: 18px; height: 18px; border-radius: 5px;
+        border: 1.6px solid {t['borderStrong']}; background: {t['surface']};
+    }}
+    QCheckBox::indicator:hover {{ border-color: {b['brand']}; }}
+    QCheckBox::indicator:checked {{
+        background: {b['brand']}; border-color: {b['brand']};
+        image: url("{_asset_url('check-white.svg')}");
+    }}
+
+    /* ---- 그룹박스(예: Figma 고급 섹션) ---- */
+    QGroupBox {{
+        background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 12px;
+        margin-top: 12px; padding: 18px 18px 16px;
+        font-size: 13px; font-weight: 800; color: {t['text']};
+    }}
+    QGroupBox::title {{
+        subcontrol-origin: margin; subcontrol-position: top left;
+        left: 16px; top: 1px; padding: 0 6px; background: {t['surface']};
+    }}
+    QGroupBox::indicator {{
+        width: 18px; height: 18px; border-radius: 5px;
+        border: 1.6px solid {t['borderStrong']}; background: {t['surface']};
+    }}
+    QGroupBox::indicator:checked {{
+        background: {b['brand']}; border-color: {b['brand']};
+        image: url("{_asset_url('check-white.svg')}");
+    }}
 
     /* ---- 표 ---- */
     QTableWidget {{

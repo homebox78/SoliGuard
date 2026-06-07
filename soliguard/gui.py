@@ -901,17 +901,22 @@ class MainWindow(QMainWindow):
         htext.addWidget(self.dash_sub)
         hrow.addLayout(htext)
         hrow.addStretch()
-        hrow.addWidget(QLabel("위험 표현"))
+        seglbl = QLabel("위험 표현"); seglbl.setStyleSheet("color:#8B92A0; font-size:12px;")
+        hrow.addWidget(seglbl)
+        hrow.addSpacing(4)
+        seg = QHBoxLayout(); seg.setSpacing(6); seg.setContentsMargins(0, 0, 0, 0)
         self._hero_seg = {}
         for key, label, ic in [("donut", " 도넛", "refresh"), ("shield", " 방패", "shield"),
                                ("numeric", " 숫자", "bolt")]:
             b = QPushButton(label)
             b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
             b.setIcon(QIcon(icons.line_icon(ic, 14, "#565E6C")))
             b.setIconSize(QSize(14, 14))
             b.clicked.connect(lambda _=False, k=key: self._set_hero(k))
             self._hero_seg[key] = b
-            hrow.addWidget(b)
+            seg.addWidget(b)
+        hrow.addLayout(seg)
         ol.addLayout(hrow)
 
         # 히어로 카드
@@ -1197,6 +1202,8 @@ class MainWindow(QMainWindow):
         seglbl = QLabel("연출")
         seglbl.setStyleSheet("color:#8B92A0; font-size:12px;")
         head.addWidget(seglbl, alignment=Qt.AlignBottom)
+        head.addSpacing(4)
+        sseg = QHBoxLayout(); sseg.setSpacing(6); sseg.setContentsMargins(0, 0, 0, 0)
         self._scan_seg = {}
         for key, label, icn in [("linear", "막대형", "list"),
                                 ("radial", "원형", "refresh"), ("minimal", "미니멀", "bolt")]:
@@ -1205,7 +1212,9 @@ class MainWindow(QMainWindow):
             b.setIcon(QIcon(icons.line_icon(icn, 14, "#565E6C")))
             b.clicked.connect(lambda _=False, k=key: self._set_scan_style(k))
             self._scan_seg[key] = b
-            head.addWidget(b, alignment=Qt.AlignBottom)
+            sseg.addWidget(b)
+        sw = QWidget(); sw.setLayout(sseg)
+        head.addWidget(sw, 0, Qt.AlignBottom)
         lay.addLayout(head)
 
         # 연출 스택
@@ -1268,8 +1277,8 @@ class MainWindow(QMainWindow):
         stage_row = QHBoxLayout(); stage_row.setSpacing(10)
         self._stage_labels = []
         for icn, name in [("folder", "파일 수집"), ("search", "내용 검사"), ("cpu", "검증·분석")]:
-            fr = QFrame()
-            fr.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
+            fr = QFrame(); fr.setObjectName("StageCard")
+            fr.setStyleSheet("QFrame#StageCard{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
             h = QHBoxLayout(fr); h.setContentsMargins(12, 10, 12, 10); h.setSpacing(9)
             box = QLabel(); box.setFixedSize(26, 26); box.setAlignment(Qt.AlignCenter)
             box.setStyleSheet("background:#E7E9EE; border-radius:7px;")
@@ -1373,19 +1382,24 @@ class MainWindow(QMainWindow):
         head.addWidget(back)
         head.addStretch()
         # 뷰 세그먼트
+        vseg = QHBoxLayout(); vseg.setSpacing(6); vseg.setContentsMargins(0, 0, 0, 0)
         self._view_seg = {}
         for key, label, ic in [("table", " 테이블", "list"), ("group", " 그룹", "layers"),
                                ("cards", " 카드", "grid")]:
             b = QPushButton(label)
             b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
             b.setIcon(QIcon(icons.line_icon(ic, 14, "#565E6C")))
             b.setIconSize(QSize(14, 14))
             b.clicked.connect(lambda _=False, k=key: self._set_result_view(k))
             self._view_seg[key] = b
-            head.addWidget(b)
-        head.addSpacing(10)
-        self.report_btn = QPushButton("✓  완료 · 리포트")
+            vseg.addWidget(b)
+        head.addLayout(vseg)
+        head.addSpacing(12)
+        self.report_btn = QPushButton("  완료 · 리포트")
         self.report_btn.setObjectName("Primary")
+        self.report_btn.setIcon(QIcon(icons.line_icon("checkCircle", 16, "#fff")))
+        self.report_btn.setCursor(Qt.PointingHandCursor)
         self.report_btn.clicked.connect(self._go_complete)
         head.addWidget(self.report_btn)
         lay.addLayout(head)
@@ -2582,7 +2596,7 @@ class MainWindow(QMainWindow):
                 txt, bg, bd = "#8B92A0", "#F7F8FA", "#E7E9EE"
                 box.setStyleSheet("background:#E7E9EE; border-radius:7px;")
                 box.setPixmap(icons.line_icon(icn, 15, "#8B92A0"))
-            fr.setStyleSheet(f"QFrame{{background:{bg};border:1px solid {bd};border-radius:10px;}}")
+            fr.setStyleSheet(f"QFrame#StageCard{{background:{bg};border:1px solid {bd};border-radius:10px;}}")
             tl.setStyleSheet(f"font-weight:700; font-size:13px; color:{txt};")
         # 원형
         self.scan_ring.set(pct, found, stage_name)

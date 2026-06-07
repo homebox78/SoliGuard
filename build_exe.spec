@@ -17,6 +17,7 @@ hidden = (
 datas = collect_data_files("reportlab")
 datas += [("assets/soliguard.ico", "assets")]
 datas += [("assets/fonts/*.ttf", "assets/fonts")]   # 번들 Pretendard(배포 보장)
+datas += [("assets/*.svg", "assets")]               # QSS 아이콘(체크/드롭다운 화살표)
 # OCR 데이터(kor) 번들 시:  datas += [("vendor/tesseract", "tesseract")]
 
 # 1) GUI 앱 (app.py = 트레이 상주 진입점)
