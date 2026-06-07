@@ -1,10 +1,17 @@
-# 개발자 PC에 흔히 남는 산출물 예시 (SoliGuard 데모용 더미 데이터)
-DB_URL = "mysql://admin:s3cr3tPw2024@10.0.0.5:3306/customers"
-AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"
-api_key = "aZ9kQ2mB7xL1pR4tWvN3sT6u"
-password = "password"  # 약한 하드코딩 비밀번호
+# 데모용 설정 파일 — 실제 비밀이 아닙니다(고도화 검출 시연용).
+# 개발자 프로파일에서 secret/ip 검출기가 활성화되어 아래 값들이 잡힙니다.
 
-# 테스트 DB에서 추출한 고객 샘플 (실수로 커밋됨)
-# 홍길동, 900101-1234568, 010-1234-5678, hong@example.com
-# 결제수단 4242 4242 4242 4242
-# 거래처 사업자번호 123-45-67891
+# DB 접속정보(URL 안에 계정/비밀번호) → "DB 접속정보"(검증됨)
+DATABASE_URL = "mysql://admin:S3cretP@ssw0rd@10.20.30.40:3306/customers"
+
+# AWS Access Key 형식(AKIA + 16) → "AWS Access Key"(검증됨)
+AWS_ACCESS_KEY_ID = "AKIA1234567890ABCD12"
+
+# 고엔트로피 토큰 → "API 키/시크릿"(검증됨)
+api_key = "aZ9kQ2mB7xL1pR4tWvN3sD6f"
+
+# 약한 비밀번호 → 패턴일치(엔트로피 낮음)
+password = "password"
+
+# 내부 서버 IP → "IP 주소"(검증됨, 낮음)
+INTERNAL_SERVER_IP = "192.168.10.55"
