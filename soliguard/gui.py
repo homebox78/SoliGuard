@@ -59,15 +59,11 @@ def _h1(text: str) -> QLabel:
     return lbl
 
 
-def _card(shadow: bool = True) -> QFrame:
+def _card(shadow: bool = False) -> QFrame:
+    # 그림자 없이 테두리로만 구분(흰 배경 · 평면 디자인). 아이콘 박스 등에
+    # 그림자가 비치지 않도록 QGraphicsDropShadowEffect는 사용하지 않는다.
     f = QFrame()
     f.setObjectName("Card")
-    if shadow:
-        eff = QGraphicsDropShadowEffect(f)
-        eff.setBlurRadius(24)
-        eff.setOffset(0, 4)
-        eff.setColor(QColor(16, 18, 24, 30))  # 흰 배경에서도 카드가 또렷이 뜨게
-        f.setGraphicsEffect(eff)
     return f
 
 
@@ -2099,11 +2095,16 @@ class MainWindow(QMainWindow):
         col2.addWidget(d2)
         r2.addLayout(col2); r2.addStretch()
         self._theme_seg = {}
+        tseg = QFrame(); tseg.setObjectName("Seg")
+        tseg.setStyleSheet("QFrame#Seg{background:#EFF1F4; border:1px solid #E7E9EE; border-radius:9px;}")
+        th = QHBoxLayout(tseg); th.setContentsMargins(3, 3, 3, 3); th.setSpacing(2)
         for key, label in [("light", "라이트"), ("dark", "다크")]:
             b = QPushButton(label); b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
             b.clicked.connect(lambda _=False, k=key: self._set_theme(k))
             self._theme_seg[key] = b
-            r2.addWidget(b)
+            th.addWidget(b)
+        r2.addWidget(tseg)
         gl.addLayout(r2)
         gl.addWidget(self._hline())
         # 언어
@@ -2265,10 +2266,7 @@ class MainWindow(QMainWindow):
         for k, b in self._theme_seg.items():
             on = k == theme
             b.setChecked(on)
-            b.setStyleSheet(
-                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:6px 14px;"
-                "background:%s;color:%s;font-weight:700;font-size:12.5px;}"
-                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+            b.setStyleSheet(_seg_btn_qss(on))
 
     def _export_audit(self):
         from . import actions
