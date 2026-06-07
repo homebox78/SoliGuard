@@ -2328,15 +2328,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "설정 저장 실패", str(e))
 
     def _style_sev_label(self, lbl, sev):
-        # 소프트 pill(테두리 없음) — 버튼처럼 보이지 않게 낮은 높이
+        # 소프트 pill(테두리 없음). 가로 레이아웃에서 세로로 늘어나지 않도록
+        # 크기 정책을 고정해 텍스트 높이에 딱 맞춘다.
+        from PySide6.QtWidgets import QSizePolicy
+        lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        _css = ("border:none; border-radius:2px; padding:2px 9px;"
+                " font-weight:700; font-size:11px;")
         if sev is None:
-            lbl.setStyleSheet("background:#F1F2F4; color:#8B92A0; border:none;"
-                              "border-radius:2px; padding:2px 9px; font-weight:700; font-size:11px;")
+            lbl.setStyleSheet("background:#F1F2F4; color:#8B92A0;" + _css)
             return
         color, bg, _line = SEV_CHIP.get(sev, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
         lbl.setText("● " + sev)
-        lbl.setStyleSheet(f"background:{bg}; color:{color}; border:none;"
-                          "border-radius:2px; padding:2px 9px; font-weight:700; font-size:11px;")
+        lbl.setStyleSheet(f"background:{bg}; color:{color};" + _css)
 
     # -------------------------------------------------------- 스캔 설정
     def _build_scanconfig(self) -> QWidget:
