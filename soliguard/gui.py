@@ -2504,20 +2504,23 @@ class MainWindow(QMainWindow):
         self.sc_kinds_grid.setColumnStretch(0, 1)
         self.sc_kinds_grid.setColumnStretch(1, 1)
         for i, (text, on) in enumerate(items):
-            self.sc_kinds_grid.addWidget(self._kind_chip(text, on), i // 2, i % 2,
-                                         Qt.AlignLeft | Qt.AlignVCenter)
+            # 정렬 없이 추가 → 셀(50%) 폭에 꽉 차게
+            self.sc_kinds_grid.addWidget(self._kind_chip(text, on), i // 2, i % 2)
 
     def _kind_chip(self, text: str, on: bool) -> QFrame:
-        """검출 항목 칩(내용폭, pill) — on이면 크림슨 채움, off면 아웃라인."""
+        """검출 항목 칩 — 셀(50%) 폭 꽉참, 모서리 5px. on=크림슨, off=아웃라인."""
+        from PySide6.QtWidgets import QSizePolicy
         chip = QFrame(); chip.setObjectName("Chip")
+        chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        chip.setMinimumHeight(34)
         h = QHBoxLayout(chip)
         h.setContentsMargins(13, 6, 14, 6)
         h.setSpacing(7)
         if on:
-            chip.setStyleSheet(f"QFrame#Chip{{background:{BRAND['brand']}; border-radius:15px;}}")
+            chip.setStyleSheet(f"QFrame#Chip{{background:{BRAND['brand']}; border-radius:5px;}}")
             ic = "check"; iccolor = "#FFFFFF"; tcolor = "#FFFFFF"
         else:
-            chip.setStyleSheet("QFrame#Chip{background:#fff; border:1px solid #E7E9EE; border-radius:15px;}")
+            chip.setStyleSheet("QFrame#Chip{background:#fff; border:1px solid #E7E9EE; border-radius:5px;}")
             ic = "plus"; iccolor = "#8B92A0"; tcolor = "#565E6C"
         icl = QLabel(); icl.setFixedSize(14, 14)
         icl.setPixmap(icons.line_icon(ic, 14, iccolor, 2.6))
@@ -2525,6 +2528,7 @@ class MainWindow(QMainWindow):
         t = QLabel(text)
         t.setStyleSheet(f"color:{tcolor}; font-size:12.5px; font-weight:700; background:transparent;")
         h.addWidget(t)
+        h.addStretch()
         return chip
 
     def _refresh_folder_count(self):
