@@ -21,15 +21,15 @@ datas += [("assets/*.svg", "assets")]               # QSS 아이콘(체크/드�
 datas += [("assets/brand/*.png", "assets/brand")]   # solideo 브랜드 로고
 # OCR 데이터(kor) 번들 시:  datas += [("vendor/tesseract", "tesseract")]
 
-# 1) GUI 앱 (app.py = 트레이 상주 진입점)
-gui_a = Analysis(["soliguard/app.py"], pathex=["."],
+# 1) GUI 앱 (run_gui.py = 패키지 임포트 런처 → 트레이 상주 진입점)
+gui_a = Analysis(["run_gui.py"], pathex=["."],
                  datas=datas, hiddenimports=hidden, cipher=block_cipher)
 gui_pyz = PYZ(gui_a.pure)
 gui_exe = EXE(gui_pyz, gui_a.scripts, [], exclude_binaries=True,
               name="SoliGuard", console=False, icon="assets/soliguard.ico")
 
-# 2) 백그라운드 에이전트 (scheduler.py, --once 로 1회 스캔)
-agent_a = Analysis(["soliguard/scheduler.py"], pathex=["."],
+# 2) 백그라운드 에이전트 (run_agent.py 런처, --once 로 1회 스캔)
+agent_a = Analysis(["run_agent.py"], pathex=["."],
                    datas=datas, hiddenimports=hidden, cipher=block_cipher)
 agent_pyz = PYZ(agent_a.pure)
 agent_exe = EXE(agent_pyz, agent_a.scripts, [], exclude_binaries=True,
