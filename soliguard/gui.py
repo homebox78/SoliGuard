@@ -746,14 +746,14 @@ class MainWindow(QMainWindow):
         bl = QHBoxLayout(brand)
         bl.setContentsMargins(18, 20, 18, 16)
         bl.setSpacing(11)
-        logo = QLabel()
-        logo.setFixedSize(34, 34)
-        logo.setPixmap(icons.shield_pixmap(34, stroke=2, color="#FFFFFF", bg=BRAND["brand"]))
-        bl.addWidget(logo)
         nm = QVBoxLayout()
-        nm.setSpacing(0)
-        name = QLabel('솔리<span style="color:%s;font-weight:800;">가드</span>' % BRAND["brand"])
-        name.setStyleSheet("font-size:16px; font-weight:800;")
+        nm.setSpacing(2)
+        _logo = icons.logo_pixmap(22, white=False)
+        if _logo is not None:
+            name = QLabel(); name.setPixmap(_logo)
+        else:
+            name = QLabel('솔리<span style="color:%s;font-weight:800;">가드</span>' % BRAND["brand"])
+            name.setStyleSheet("font-size:16px; font-weight:800;")
         nm.addWidget(name)
         tag = QLabel("SoliGuard · v"
                      + getattr(__import__("soliguard"), "__version__", "1.0"))
