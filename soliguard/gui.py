@@ -363,6 +363,7 @@ class MainWindow(QMainWindow):
         self.cfg = cfg
         self.profile = getattr(cfg, "profile", None) or "개발자"
         self.profiles = list(getattr(cfg, "profiles", None) or [self.profile])
+        self.theme = getattr(cfg, "theme", None) or "light"
         self.worker = None
         self.file_results = []
         self.row_index = []
@@ -505,6 +506,10 @@ class MainWindow(QMainWindow):
             self.profiles = dlg.selected
             self.profile = self.profiles[0]
             self._refresh_role_chip()
+            if hasattr(self, "_settings_rolebtn"):
+                self._settings_rolebtn.setText("  " + ", ".join(self.profiles) + "  ▾")
+                self._settings_rolebtn.setIcon(
+                    QIcon(icons.line_icon(icons.ROLE_ICON.get(self.profiles[0], "user"), 15, "#B0123F")))
 
     def _navigate(self, key: str):
         target = {"dashboard": self.dashboard, "quarantine": self.quarantine,
@@ -1145,44 +1150,266 @@ class MainWindow(QMainWindow):
         lay.setSpacing(16)
         lay.addWidget(_h1("설정"))
 
-        gen = _card()
-        gl = QVBoxLayout(gen)
-        gl.setContentsMargins(22, 18, 22, 18)
-        gl.setSpacing(10)
-        gl.addWidget(self._mini_label("일반"))
+        body = QHBoxLayout()
+        body.setSpacing(18)
+        # 좌측 탭 내비
+        navc = QWidget()
+        navc.setFixedWidth(190)
+        nl = QVBoxLayout(navc)
+        nl.setContentsMargins(0, 0, 0, 0)
+        nl.setSpacing(2)
+        self._settings_tabs = {}
+        for key, label, ic in [("general", "일반", "settings"), ("scan", "스캔", "search"),
+                               ("auto", "자동 점검", "clock"), ("security", "보안", "shield"),
+                               ("about", "정보", "fileText")]:
+            b = QPushButton("  " + label)
+            b.setObjectName("Nav")
+            b.setCheckable(True)
+            b.setIcon(QIcon(icons.line_icon(ic, 17, "#565E6C")))
+            b.setIconSize(QSize(17, 17))
+            b.clicked.connect(lambda _=False, k=key: self._set_settings_tab(k))
+            self._settings_tabs[key] = b
+            nl.addWidget(b)
+        nl.addStretch()
+        body.addWidget(navc)
+
+        self.settings_stack = QStackedWidget()
+        self.settings_stack.addWidget(self._settings_general())
+        self.settings_stack.addWidget(self._settings_scan())
+        self.settings_stack.addWidget(self._settings_auto())
+        self.settings_stack.addWidget(self._settings_security())
+        self.settings_stack.addWidget(self._settings_about())
+        body.addWidget(self.settings_stack, 1)
+        lay.addLayout(body, 1)
+        self._set_settings_tab("general")
+        return w
+
+    def _settings_general(self) -> QWidget:
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(24, 20, 24, 20)
+        gl.setSpacing(14)
+        # 직무 프로파일
+        r1 = QHBoxLayout()
+        col = QVBoxLayout(); col.setSpacing(1)
+        t = QLabel("직무 프로파일"); t.setStyleSheet("font-weight:700; font-size:14px;")
+        col.addWidget(t)
+        d = QLabel("선택한 직무에 맞춰 스캔 폴더·검출 항목이 구성됩니다")
+        d.setStyleSheet("color:#565E6C; font-size:12px;")
+        col.addWidget(d)
+        r1.addLayout(col); r1.addStretch()
+        rolebtn = QPushButton("  " + (", ".join(self.profiles)) + "  ▾")
+        rolebtn.setObjectName("Ghost")
+        rolebtn.setIcon(QIcon(icons.line_icon(icons.ROLE_ICON.get(self.profiles[0], "user"), 15, "#B0123F")))
+        rolebtn.clicked.connect(self._open_role_popover)
+        self._settings_rolebtn = rolebtn
+        r1.addWidget(rolebtn)
+        gl.addLayout(r1)
+        gl.addWidget(self._hline())
+        # 테마
+        r2 = QHBoxLayout()
+        col2 = QVBoxLayout(); col2.setSpacing(1)
+        t2 = QLabel("테마"); t2.setStyleSheet("font-weight:700; font-size:14px;")
+        col2.addWidget(t2)
+        d2 = QLabel("야간 작업이 많다면 다크 모드를 권장합니다")
+        d2.setStyleSheet("color:#565E6C; font-size:12px;")
+        col2.addWidget(d2)
+        r2.addLayout(col2); r2.addStretch()
+        self._theme_seg = {}
+        for key, label in [("light", "라이트"), ("dark", "다크")]:
+            b = QPushButton(label); b.setCheckable(True)
+            b.clicked.connect(lambda _=False, k=key: self._set_theme(k))
+            self._theme_seg[key] = b
+            r2.addWidget(b)
+        gl.addLayout(r2)
+        gl.addWidget(self._hline())
+        # 언어
+        r3 = QHBoxLayout()
+        t3 = QLabel("언어"); t3.setStyleSheet("font-weight:700; font-size:14px;")
+        r3.addWidget(t3); r3.addStretch()
+        r3.addWidget(QLabel("한국어"))
+        gl.addLayout(r3)
+        self.font_info_label = QLabel("현재 글꼴: 확인 중…")
+        self.font_info_label.setStyleSheet("color:#8B92A0; font-size:11px;")
+        gl.addWidget(self.font_info_label)
+        gl.addStretch()
+        self._set_theme(self.theme)
+        return self._tab_wrap(c)
+
+    def _settings_scan(self) -> QWidget:
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(24, 20, 24, 20)
+        gl.setSpacing(12)
         self.ocr_check = QCheckBox("이미지 속 신분증·계약서도 검사 (로컬 OCR)")
         self.ocr_check.setChecked(getattr(self.cfg, "ocr_mode", "local") != "off")
         gl.addWidget(self.ocr_check)
+        gl.addWidget(self._hline())
+        gl.addWidget(QLabel("지원 파일 형식"))
+        ex = QLabel("txt · csv · log · 소스코드 · xlsx · xls · docx · hwp · hwpx · pdf · "
+                    "이미지(OCR) · psd · xd")
+        ex.setWordWrap(True); ex.setStyleSheet("color:#565E6C; font-size:12px;")
+        gl.addWidget(ex)
+        gl.addStretch()
+        return self._tab_wrap(c)
+
+    def _settings_auto(self) -> QWidget:
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(24, 20, 24, 20)
+        gl.setSpacing(12)
         fr = QHBoxLayout()
         fr.addWidget(QLabel("자동 점검 주기"))
+        fr.addStretch()
         self.freq_box = QComboBox()
         self.freq_box.addItems(_FREQ_ITEMS)
+        sc = getattr(self.cfg, "schedule", None)
+        if sc and getattr(sc, "enabled", False):
+            self.freq_box.setCurrentText({"daily": "매일", "weekly": "매주(월요일)",
+                                          "monthly": "매월(1일)"}.get(sc.frequency, "매주(월요일)"))
         fr.addWidget(self.freq_box)
-        fr.addStretch()
         gl.addLayout(fr)
-        gl.addWidget(QLabel("직무 프로파일은 좌측 하단 칩에서 복수 선택할 수 있습니다."))
-        self.font_info_label = QLabel("현재 글꼴: 확인 중…")
-        self.font_info_label.setStyleSheet("color:#8B92A0; font-size:12px;")
-        gl.addWidget(self.font_info_label)
-        lay.addWidget(gen)
+        note = QLabel("정해진 주기에 백그라운드에서 자동으로 PC를 점검하고 리포트를 남깁니다.\n"
+                      "자동 완전삭제는 제공하지 않습니다(사고 방지).")
+        note.setStyleSheet("color:#565E6C; font-size:12px;")
+        gl.addWidget(note)
+        gl.addStretch()
+        return self._tab_wrap(c)
 
+    def _settings_security(self) -> QWidget:
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(24, 20, 24, 20)
+        gl.setSpacing(12)
+        from . import actions
+        qr = QHBoxLayout()
+        qr.addWidget(QLabel("격리 폴더"))
+        qr.addStretch()
+        ql = QLabel(str(actions.QUARANTINE_DIR))
+        ql.setStyleSheet("color:#565E6C; font-size:11.5px; font-family:'JetBrains Mono',monospace;")
+        qr.addWidget(ql)
+        gl.addLayout(qr)
+        ar = QHBoxLayout()
+        ar.addWidget(QLabel("감사 로그"))
+        ar.addStretch()
+        exp = QPushButton("CSV로 내보내기")
+        exp.setObjectName("Ghost")
+        exp.clicked.connect(self._export_audit)
+        ar.addWidget(exp)
+        gl.addLayout(ar)
+        gl.addWidget(self._hline())
         try:
             from .ui.settings_figma import FigmaOptInSection
             self.figma_section = FigmaOptInSection()
             self.figma_section.scan_requested.connect(self.run_figma_scan)
-            lay.addWidget(self.figma_section)
+            gl.addWidget(self.figma_section)
         except Exception:
             self.figma_section = None
+        gl.addStretch()
+        return self._tab_wrap(c)
 
+    def _settings_about(self) -> QWidget:
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(24, 20, 24, 20)
+        gl.setSpacing(14)
+        top = QHBoxLayout()
+        logo = QLabel()
+        logo.setFixedSize(52, 52)
+        logo.setPixmap(icons.shield_pixmap(52, stroke=3, color="#FFFFFF", bg="#B0123F"))
+        top.addWidget(logo)
+        tc = QVBoxLayout(); tc.setSpacing(2)
+        nm = QLabel('솔리가드 <span style="color:#B0123F;">SoliGuard</span>')
+        nm.setStyleSheet("font-size:18px; font-weight:800;")
+        tc.addWidget(nm)
+        ver = QLabel("v" + getattr(__import__("soliguard"), "__version__", "1.0") + " · solideo")
+        ver.setStyleSheet("color:#8B92A0; font-size:12px;")
+        tc.addWidget(ver)
+        top.addLayout(tc); top.addStretch()
+        gl.addLayout(top)
+        gl.addWidget(self._hline())
+        p1 = QLabel("제품"); p1.setStyleSheet("font-weight:700;")
+        gl.addWidget(p1)
+        p2 = QLabel("SI 실무자를 위한 직무 맞춤형 개인정보 자가점검 도구")
+        p2.setStyleSheet("color:#565E6C; font-size:12.5px;")
+        gl.addWidget(p2)
+        gl.addWidget(self._hline())
+        ur = QHBoxLayout()
+        uc = QVBoxLayout(); uc.setSpacing(1)
+        u1 = QLabel("업데이트"); u1.setStyleSheet("font-weight:700;")
+        uc.addWidget(u1)
+        u2 = QLabel("최신 버전을 사용 중입니다")
+        u2.setStyleSheet("color:#565E6C; font-size:12px;")
+        uc.addWidget(u2)
+        ur.addLayout(uc); ur.addStretch()
+        upd = QPushButton("업데이트 확인")
+        upd.setObjectName("Ghost")
+        upd.clicked.connect(lambda: QMessageBox.information(self, "업데이트", "최신 버전을 사용 중입니다."))
+        ur.addWidget(upd)
+        gl.addLayout(ur)
+        gl.addStretch()
+        return self._tab_wrap(c)
+
+    def _tab_wrap(self, card) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(card)
         bar = QHBoxLayout()
         bar.addStretch()
         save = QPushButton("설정 저장")
         save.setObjectName("Primary")
         save.clicked.connect(self._save_settings)
         bar.addWidget(save)
-        lay.addLayout(bar)
-        lay.addStretch()
+        v.addLayout(bar)
+        v.addStretch()
         return w
+
+    def _hline(self) -> QFrame:
+        ln = QFrame(); ln.setFrameShape(QFrame.HLine)
+        ln.setStyleSheet("color:#E7E9EE;")
+        ln.setFixedHeight(1)
+        return ln
+
+    def _set_settings_tab(self, key: str):
+        order = ["general", "scan", "auto", "security", "about"]
+        self.settings_stack.setCurrentIndex(order.index(key))
+        for k, b in self._settings_tabs.items():
+            b.setChecked(k == key)
+
+    def _set_theme(self, theme: str):
+        self.theme = theme
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(build_qss(theme))
+        for k, b in self._theme_seg.items():
+            on = k == theme
+            b.setChecked(on)
+            b.setStyleSheet(
+                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:6px 14px;"
+                "background:%s;color:%s;font-weight:700;font-size:12.5px;}"
+                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+
+    def _export_audit(self):
+        from . import actions
+        if not actions.AUDIT_LOG.exists():
+            QMessageBox.information(self, "감사 로그", "아직 기록이 없습니다.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "감사 로그 내보내기", "audit.csv", "CSV (*.csv)")
+        if not path:
+            return
+        import csv
+        rows = _read_audit_tail(100000)
+        try:
+            with open(path, "w", encoding="utf-8-sig", newline="") as f:
+                wr = csv.writer(f)
+                wr.writerow(["시각", "작업", "대상", "결과", "사용자"])
+                for e in rows:
+                    wr.writerow([e.get("ts", ""), _ACTION_KO.get(e.get("action", ""), e.get("action", "")),
+                                 e.get("path", ""), e.get("result", ""), e.get("user", "")])
+            QMessageBox.information(self, "감사 로그", f"내보냈습니다: {path}")
+        except OSError as ex:
+            QMessageBox.warning(self, "내보내기 실패", str(ex))
 
     def _save_settings(self):
         try:
@@ -1191,6 +1418,7 @@ class MainWindow(QMainWindow):
             cfg.profiles = list(self.profiles)
             cfg.profile = self.profiles[0] if self.profiles else "개발자"
             cfg.ocr_mode = "local" if self.ocr_check.isChecked() else "off"
+            cfg.theme = getattr(self, "theme", "light")
             enabled = self.freq_box.currentText() != "사용 안 함"
             freq = {"매일": "daily", "매주(월요일)": "weekly",
                     "매월(1일)": "monthly"}.get(self.freq_box.currentText(), "weekly")

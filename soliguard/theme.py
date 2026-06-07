@@ -32,6 +32,12 @@ TOKENS = {
         "text": "#14161C", "text2": "#565E6C", "text3": "#8B92A0",
         "rowHover": "#F7F8FA", "rowSelected": "#FCEFF3",
     },
+    "dark": {
+        "bg": "#14161C", "surface": "#1E2128", "surfaceAlt": "#262A33",
+        "border": "#2E333D", "borderStrong": "#3A4049",
+        "text": "#F1F2F4", "text2": "#AEB6C2", "text3": "#7E8694",
+        "rowHover": "#262A33", "rowSelected": "#2A1620",
+    },
 }
 
 # 위험 등급(엔진 한국어) → 표시
@@ -58,7 +64,7 @@ def severity_color(severity_value: str) -> str:
 
 
 def build_qss(theme: str = "light") -> str:
-    t = TOKENS["light"]
+    t = TOKENS.get(theme, TOKENS["light"])
     b = BRAND
     return f"""
     QWidget {{
