@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -18,6 +18,9 @@ from .detectors import DEFAULT_DETECTORS
 from .whitelist import build_user_keys, is_dummy, norm_key
 
 __all__ = ["DetectionEngine", "ScanSummary"]
+
+# (시작, 끝, 라벨) — 구조화 포맷(표/JSON)에서 값이 속한 필드 구간
+FieldSpan = tuple[int, int, str]
 
 # 최종 정렬용 위험도 가중치(높을수록 먼저)
 _SEVERITY_ORDER = {Severity.HIGH: 0, Severity.MEDIUM: 1, Severity.LOW: 2}
@@ -63,6 +66,7 @@ class DetectionEngine:
         # 등록 순서 = 중복 스팬 우선순위
         self._all: list[Detector] = list(detectors)
         self._rank = {d.name: i for i, d in enumerate(self._all)}
+        self._by_name = {d.name: d for d in self._all}
         self._user_wl: set[str] = build_user_keys(user_whitelist)
 
         role_set: set[str] = set(roles or ())
@@ -92,9 +96,17 @@ class DetectionEngine:
     # ------------------------------------------------------------------
     # 스캔
     # ------------------------------------------------------------------
-    def scan_text(self, text: str) -> list[Finding]:
-        """주어진 텍스트를 스캔해 정리된 Finding 목록을 반환."""
+    def scan_text(
+        self, text: str, fields: Sequence[FieldSpan] | None = None
+    ) -> list[Finding]:
+        """주어진 텍스트를 스캔해 정리된 Finding 목록을 반환.
+
+        :param fields: 구조화 포맷(CSV/XLSX/JSON)에서 추출한 (시작,끝,필드라벨)
+            구간 목록. 값이 속한 컬럼/키 라벨을 검출 결과에 부착하고,
+            라벨이 유형과 일치하면 검증 실패 후보도 '필드 보강'으로 구제한다.
+        """
         line_index = LineIndex.build(text)
+        spans = sorted(fields or (), key=lambda s: (s[0], -(s[1] - s[0])))
         raw_findings: list[Finding] = []
         for det in self._active:
             for finding in det.detect(text, line_index):
@@ -102,6 +114,21 @@ class DetectionEngine:
                     continue
                 if self._user_wl and norm_key(finding.raw) in self._user_wl:
                     continue  # 사용자 지정 오탐 제외
+
+                label = self._field_of(finding, spans)
+                in_field = bool(label) and self._label_matches(det, label)
+
+                if finding.weak:
+                    # 형식만 일치한 후보: keep_unverified 거나, 소속 필드 라벨이
+                    # 이 유형과 일치할 때만 보존(자유 텍스트 오탐은 차단).
+                    if not (det.keep_unverified or in_field):
+                        continue
+                    if in_field:
+                        # 라벨이 유형을 확증 → 강등됐던 위험도를 원복
+                        finding = replace(finding, severity=det.severity)
+
+                if label:
+                    finding = replace(finding, field=label)
                 raw_findings.append(finding)
 
         resolved = self._resolve_overlaps(raw_findings)
@@ -109,6 +136,22 @@ class DetectionEngine:
             key=lambda f: (_SEVERITY_ORDER[f.severity], f.line, f.start)
         )
         return resolved
+
+    @staticmethod
+    def _field_of(finding: Finding, spans: Sequence[FieldSpan]) -> str:
+        """검출 위치를 포함하는 가장 작은 필드 구간의 라벨(없으면 빈 문자열)."""
+        for s, e, label in spans:
+            if s <= finding.start and finding.end <= e:
+                return label
+        return ""
+
+    @staticmethod
+    def _label_matches(det: Detector, label: str) -> bool:
+        """필드 라벨에 이 검출기의 키워드가 포함되면 True(대소문자·공백 무시)."""
+        if not det.field_keywords:
+            return False
+        norm = label.lower().replace(" ", "").replace("_", "")
+        return any(kw.lower().replace(" ", "") in norm for kw in det.field_keywords)
 
     def scan_file(self, path: str | Path, encoding: str = "utf-8") -> list[Finding]:
         """텍스트 파일 하나를 스캔(PoC: 평문 디코딩만).

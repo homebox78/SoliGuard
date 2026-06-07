@@ -46,6 +46,8 @@ class Finding:
     end: int               # 원문 내 끝 오프셋
     line: int              # 1-기반 줄 번호
     context: str = ""      # 주변 문맥(추후 AI 판단용), 화면 노출 금지
+    field: str = ""        # 구조화 포맷(표/JSON)의 소속 필드 라벨(컬럼 헤더 등)
+    weak: bool = False      # 형식만 일치(2차 검증 실패) → 엔진이 보존 여부 결정
 
     def __repr__(self) -> str:  # 디버깅 시에도 원문이 새지 않도록 마스킹만 노출
         return (
@@ -73,6 +75,9 @@ class Detector(ABC):
     default_roles: frozenset[str] = frozenset()
     #: 2차 검증 실패(PATTERN_ONLY) 후보도 결과에 남길지 여부
     keep_unverified: bool = False
+    #: 구조화 필드(컬럼 헤더·JSON 키)에 이 부분문자열이 있으면 이 검출기의
+    #: 유형으로 강하게 추정 → 검증 실패 후보도 '필드 보강'으로 구제한다.
+    field_keywords: tuple[str, ...] = ()
 
     @property
     def pattern(self) -> re.Pattern[str]:
@@ -88,16 +93,18 @@ class Detector(ABC):
         raise NotImplementedError
 
     def detect(self, text: str, line_index: "LineIndex") -> Iterator[Finding]:
-        """2단계 스캔: 정규식으로 후보를 찾고 각 후보를 검증한다."""
+        """2단계 스캔: 정규식으로 후보를 찾고 각 후보를 검증한다.
+
+        검증 실패(weak) 후보도 항상 내보낸다. 최종 보존 여부는 엔진이
+        결정한다(keep_unverified 또는 소속 필드 라벨 일치 시 구제).
+        """
         for m in self.pattern.finditer(text):
             raw = m.group(0)
             verified = self.validate(raw)
-            if not verified and not self.keep_unverified:
-                continue
             confidence = (
                 Confidence.VERIFIED if verified else Confidence.PATTERN_ONLY
             )
-            # 검증 실패한 후보는 한 단계 낮은 위험도로 강등
+            # 검증 실패한 후보는 한 단계 낮은 위험도로 강등(필드 구제 시 엔진이 복원)
             severity = self.severity
             if not verified and severity is Severity.HIGH:
                 severity = Severity.MEDIUM
@@ -105,7 +112,7 @@ class Detector(ABC):
             start = m.start()
             yield Finding(
                 detector=self.name,
-                info_type=self.info_type,
+                info_type=self.detected_type(raw),
                 severity=severity,
                 confidence=confidence,
                 raw=raw,
@@ -114,7 +121,12 @@ class Detector(ABC):
                 end=m.end(),
                 line=line_index.line_of(start),
                 context=_context(text, start, m.end()),
+                weak=not verified,
             )
+
+    def detected_type(self, raw: str) -> str:
+        """이 매치의 한국어 정보 유형명. 매치 내용에 따라 분기할 검출기는 재정의."""
+        return self.info_type
 
 
 @dataclass

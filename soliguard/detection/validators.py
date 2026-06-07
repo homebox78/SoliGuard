@@ -17,8 +17,12 @@ __all__ = [
     "is_valid_date",
     "validate_rrn",
     "validate_foreigner_rrn",
+    "rrn_is_foreigner",
     "luhn_valid",
     "validate_brn",
+    "validate_passport",
+    "validate_driver_license",
+    "valid_ipv4",
     "shannon_entropy",
 ]
 
@@ -98,6 +102,12 @@ def validate_foreigner_rrn(text: str) -> bool:
     return validate_rrn(text)
 
 
+def rrn_is_foreigner(text: str) -> bool:
+    """13자리 번호의 성별코드가 외국인(5~8)이면 True. 표시 유형 분기용."""
+    d = digits_only(text)
+    return len(d) == 13 and d[6] in ("5", "6", "7", "8")
+
+
 def luhn_valid(text: str) -> bool:
     """신용카드 번호 Luhn 알고리즘 검증.
 
@@ -140,6 +150,68 @@ def validate_brn(text: str) -> bool:
     total += (int(d[8]) * 5) // 10
     check = (10 - (total % 10)) % 10
     return check == int(d[9])
+
+
+# 한국 여권번호 발급기호(전자여권 기준): M 일반, S 긴급, R 거주여권,
+# O 관용, D 외교관, G 여행증명서 등. 첫 글자가 이 집합이면 한국 여권으로 본다.
+_PASSPORT_PREFIX = frozenset("MSRODGP")
+
+
+def validate_passport(text: str) -> bool:
+    """한국 여권번호 검증(형식 + 발급기호).
+
+    구권: 영문 1자 + 숫자 8자(M12345678). 국제표준 신권도 동일 길이대.
+    발급기호가 한국 체계에 속하고 숫자가 모두 같지 않으면 유효로 본다.
+    """
+    s = text.strip().upper().replace(" ", "").replace("-", "")
+    if len(s) != 9:
+        return False
+    if s[0] not in _PASSPORT_PREFIX:
+        return False
+    digits = s[1:]
+    if not digits.isdigit():
+        return False
+    return len(set(digits)) > 1
+
+
+# 운전면허 지역코드(앞 2자리): 11 서울 ~ 28 권역. 신뢰 가능한 공개 범위.
+_DL_REGIONS = frozenset(str(n) for n in range(11, 29))
+
+
+def validate_driver_license(text: str) -> bool:
+    """운전면허번호 검증. 형식(지역2-연도2-일련6-검증2) + 지역코드 유효성.
+
+    공개된 검증번호 산식이 표준화돼 있지 않아 지역코드·자릿수·연도
+    범위로 형식 검증한다(체크섬 미적용분은 컬럼 라벨로 보강 구제)."""
+    d = digits_only(text)
+    if len(d) != 12:
+        return False
+    if d[0:2] not in _DL_REGIONS:
+        return False
+    year2 = int(d[2:4])  # 발급(취득) 연도 두 자리: 00~99 모두 허용
+    if year2 > 99:
+        return False
+    return len(set(d)) > 2
+
+
+def valid_ipv4(text: str) -> bool:
+    """IPv4 점표기 검증. 각 옥텟 0~255, 선행 0 금지, 무의미값 제외."""
+    parts = text.strip().split(".")
+    if len(parts) != 4:
+        return False
+    octets = []
+    for p in parts:
+        if not p.isdigit():
+            return False
+        if len(p) > 1 and p[0] == "0":  # 선행 0(버전 문자열 등) 배제
+            return False
+        v = int(p)
+        if v > 255:
+            return False
+        octets.append(v)
+    if all(o == 0 for o in octets) or all(o == 255 for o in octets):
+        return False
+    return True
 
 
 def shannon_entropy(text: str) -> float:

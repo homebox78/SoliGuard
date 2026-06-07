@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .detection import DetectionEngine, Finding, Severity
-from .extractors import ExtractionError, extract_text, is_supported
+from .extractors import ExtractionError, extract_doc, is_supported
 
 __all__ = [
     "FileScanResult",
@@ -49,10 +49,10 @@ def scan_file(
     """파일 1개를 추출→검출. 추출 실패 시 status='검사불가'."""
     path = Path(path)
     try:
-        text = extract_text(path, ocr_enabled=ocr_enabled)
+        doc = extract_doc(path, ocr_enabled=ocr_enabled)
     except ExtractionError as e:
         return FileScanResult(path, "검사불가", error=str(e))
-    findings = engine.scan_text(text)
+    findings = engine.scan_text(doc.text, fields=doc.fields)
     return FileScanResult(path, "완료", findings=findings)
 
 

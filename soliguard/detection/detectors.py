@@ -26,12 +26,13 @@ ROLE_FINANCE = "finance"
 # 표준 검출기
 # ---------------------------------------------------------------------------
 class RRNDetector(Detector):
-    """주민등록번호. 생년월일·성별·체크섬 2차 검증."""
+    """주민등록번호/외국인등록번호. 생년월일·성별·체크섬 2차 검증."""
 
     name = "rrn"
     info_type = "주민등록번호"
     severity = Severity.HIGH
     keep_unverified = False  # 오탐이 치명적이라 검증 통과분만
+    field_keywords = ("주민", "주민번호", "주민등록", "외국인등록", "rrn", "ssn")
 
     _pat = re.compile(r"(?<!\d)\d{6}-?[1-8]\d{6}(?!\d)")
 
@@ -41,6 +42,9 @@ class RRNDetector(Detector):
 
     def validate(self, raw: str) -> bool:
         return V.validate_rrn(raw) or V.validate_foreigner_rrn(raw)
+
+    def detected_type(self, raw: str) -> str:
+        return "외국인등록번호" if V.rrn_is_foreigner(raw) else "주민등록번호"
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
@@ -53,6 +57,7 @@ class CreditCardDetector(Detector):
     name = "credit_card"
     info_type = "신용카드번호"
     severity = Severity.HIGH
+    field_keywords = ("카드", "카드번호", "card", "cardno", "pan")
 
     # 13~19자리, 자리 사이 단일 공백/하이픈 허용
     _pat = re.compile(r"(?<![\w-])\d(?:[ -]?\d){12,18}(?![\w-])")
@@ -75,6 +80,7 @@ class BRNDetector(Detector):
     name = "brn"
     info_type = "사업자등록번호"
     severity = Severity.MEDIUM
+    field_keywords = ("사업자", "사업자등록", "brn", "법인")
 
     _pat = re.compile(r"(?<!\d)\d{3}-?\d{2}-?\d{5}(?!\d)")
 
@@ -96,6 +102,9 @@ class PhoneDetector(Detector):
     name = "phone"
     info_type = "전화번호"
     severity = Severity.MEDIUM
+    field_keywords = (
+        "전화", "휴대폰", "휴대전화", "핸드폰", "연락처", "phone", "mobile", "tel", "hp",
+    )
 
     _pat = re.compile(
         r"(?<![\d-])(?:01[016789]|0\d{1,2})[ .-]?\d{3,4}[ .-]?\d{4}(?![\d-])"
@@ -120,6 +129,7 @@ class EmailDetector(Detector):
     name = "email"
     info_type = "이메일"
     severity = Severity.MEDIUM
+    field_keywords = ("이메일", "메일", "email", "e-mail", "mail")
 
     _pat = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
@@ -147,6 +157,7 @@ class AccountDetector(Detector):
     info_type = "계좌번호"
     severity = Severity.MEDIUM
     keep_unverified = False
+    field_keywords = ("계좌", "계좌번호", "예금주", "account", "acct", "iban")
 
     # 3그룹(하이픈 2개) 형태만, 첫 그룹 2~4자리(은행 계좌 형태)
     _pat = re.compile(r"(?<![\d-])\d{2,4}-\d{2,6}-\d{2,6}(?:-\d{1,6})?(?![\d-])")
@@ -163,6 +174,107 @@ class AccountDetector(Detector):
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
         return "*" * (len(d) - 4) + d[-4:]
+
+
+class PassportDetector(Detector):
+    """여권번호. 발급기호(영문 1자) + 숫자 8자리 형식·기호 검증."""
+
+    name = "passport"
+    info_type = "여권번호"
+    severity = Severity.HIGH
+    field_keywords = ("여권", "passport", "passportno")
+
+    # 영문 1자 + 숫자 8자(구권/전자여권). 앞뒤 영숫자 경계로 토큰 분리.
+    _pat = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]\d{8}(?![A-Za-z0-9])")
+
+    @property
+    def pattern(self) -> re.Pattern[str]:
+        return self._pat
+
+    def validate(self, raw: str) -> bool:
+        return V.validate_passport(raw)
+
+    def mask(self, raw: str) -> str:
+        s = raw.strip()
+        return f"{s[0]}{s[1:3]}*****"
+
+
+class DriverLicenseDetector(Detector):
+    """운전면허번호. 지역코드(2)-연도(2)-일련(6)-검증(2) 형식·지역 검증."""
+
+    name = "driver_license"
+    info_type = "운전면허번호"
+    severity = Severity.HIGH
+    field_keywords = ("운전면허", "면허번호", "면허", "license", "driver")
+
+    _pat = re.compile(r"(?<!\d)\d{2}-?\d{2}-?\d{6}-?\d{2}(?!\d)")
+
+    @property
+    def pattern(self) -> re.Pattern[str]:
+        return self._pat
+
+    def validate(self, raw: str) -> bool:
+        return V.validate_driver_license(raw)
+
+    def mask(self, raw: str) -> str:
+        d = V.digits_only(raw)
+        return f"{d[0:2]}-{d[2:4]}-******-**"
+
+
+class IPDetector(Detector):
+    """IPv4 주소. 옥텟 범위 검증(개발자 직무 특화, 단독 위험 낮아 LOW)."""
+
+    name = "ip"
+    info_type = "IP 주소"
+    severity = Severity.LOW
+    default_roles = frozenset({ROLE_DEVELOPER})
+    field_keywords = ("ip", "아이피", "ipaddr", "host", "서버")
+
+    _pat = re.compile(r"(?<![\d.])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\d.])")
+
+    @property
+    def pattern(self) -> re.Pattern[str]:
+        return self._pat
+
+    def validate(self, raw: str) -> bool:
+        return V.valid_ipv4(raw)
+
+    def mask(self, raw: str) -> str:
+        parts = raw.strip().split(".")
+        return f"{parts[0]}.{parts[1]}.*.*" if len(parts) == 4 else "*.*.*.*"
+
+
+class AddressDetector(Detector):
+    """한국 도로명/지번 주소(시/도 + 시군구 + 도로·동 + 번지). 단독 노출 LOW."""
+
+    name = "address"
+    info_type = "주소"
+    severity = Severity.LOW
+    field_keywords = ("주소", "거주지", "address", "addr", "소재지")
+
+    _SIDO = (
+        r"서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충청북도|충청남도|충북|충남"
+        r"|전라북도|전라남도|전북|전남|경상북도|경상남도|경북|경남|제주"
+    )
+    _pat = re.compile(
+        rf"(?:{_SIDO})(?:특별시|광역시|특별자치시|특별자치도|도)?\s*"
+        r"[가-힣]{1,10}(?:시|군|구)\s*"
+        r"[가-힣A-Za-z0-9]{1,20}(?:읍|면|동|리|로|길|가)\s*"
+        r"\d{1,4}(?:-\d{1,4})?"
+    )
+
+    @property
+    def pattern(self) -> re.Pattern[str]:
+        return self._pat
+
+    def validate(self, raw: str) -> bool:
+        # 전체 패턴이 일치했다는 것 자체가 강한 구조적 증거(체크섬 없음)
+        return True
+
+    def mask(self, raw: str) -> str:
+        s = raw.strip()
+        head = s[:6]
+        return head + "*" * max(2, len(s) - len(head))
 
 
 # ---------------------------------------------------------------------------
@@ -280,11 +392,15 @@ class SecretDetector(Detector):
 
 #: 엔진이 기본 등록하는 검출기 목록(순서 = 스팬 중복 시 우선순위)
 DEFAULT_DETECTORS: tuple[type[Detector], ...] = (
-    RRNDetector,
-    BRNDetector,
-    CreditCardDetector,
-    SecretDetector,
-    PhoneDetector,
-    AccountDetector,
-    EmailDetector,
+    RRNDetector,            # 주민/외국인등록번호
+    BRNDetector,            # 사업자등록번호
+    CreditCardDetector,     # 신용카드
+    PassportDetector,       # 여권번호
+    DriverLicenseDetector,  # 운전면허(계좌보다 우선해 12자리 오인식 방지)
+    SecretDetector,         # API 키/시크릿(개발자)
+    PhoneDetector,          # 전화번호(계좌보다 우선)
+    AccountDetector,        # 계좌번호
+    IPDetector,             # IP 주소(개발자)
+    EmailDetector,          # 이메일
+    AddressDetector,        # 주소(가장 낮은 우선순위)
 )

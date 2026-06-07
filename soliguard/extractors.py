@@ -15,17 +15,60 @@ ExtractionError 로 격리되어 전체 스캔이 멈추지 않는다(기획서 
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import re
 import struct
 import zipfile
 import zlib
+from dataclasses import dataclass, field as _dc_field
 from pathlib import Path
 
-__all__ = ["extract_text", "ExtractionError", "is_supported"]
+__all__ = ["extract_text", "extract_doc", "ExtractedDoc", "ExtractionError", "is_supported"]
 
 
 class ExtractionError(Exception):
     """파싱 불가(암호/손상/미지원/라이브러리 없음) 시 발생 → '검사불가' 처리."""
+
+
+@dataclass
+class ExtractedDoc:
+    """추출 결과. 검출 엔진이 그대로 스캔하는 평문(text)과, 구조화 포맷에서
+    얻은 필드 구간(fields=[(시작, 끝, 라벨)])을 함께 제공한다.
+
+    fields 의 라벨(컬럼 헤더·JSON 키)을 통해 엔진이 '각 확장자 구조'에 맞춘
+    문맥 검증을 수행한다(예: '주민등록번호' 열의 값은 강하게 그 유형으로 추정)."""
+
+    text: str
+    fields: list[tuple[int, int, str]] = _dc_field(default_factory=list)
+
+
+class _DocBuilder:
+    """평문과 필드 구간을 함께 누적하는 보조 빌더(오프셋 정합 보장)."""
+
+    def __init__(self) -> None:
+        self._parts: list[str] = []
+        self._pos = 0
+        self.fields: list[tuple[int, int, str]] = []
+
+    def add(self, value, label: str = "") -> None:
+        """값 한 토큰을 한 줄로 추가하고, 라벨이 있으면 그 구간을 기록한다."""
+        if value is None:
+            return
+        s = str(value).strip()
+        if not s:
+            return
+        start = self._pos
+        self._parts.append(s)
+        self._pos += len(s)
+        if label:
+            self.fields.append((start, self._pos, label.strip()))
+        self._parts.append("\n")
+        self._pos += 1
+
+    def build(self) -> ExtractedDoc:
+        return ExtractedDoc("".join(self._parts), self.fields)
 
 
 SUPPORTED_TEXT = {
@@ -80,6 +123,127 @@ def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
         raise
     except Exception as e:  # 포맷 라이브러리의 모든 예외를 격리
         raise ExtractionError(f"{path.name} 파싱 실패: {e}") from e
+
+
+def extract_doc(path: str | Path, ocr_enabled: bool = True) -> ExtractedDoc:
+    """구조 인식 추출. 표(csv/xlsx/xls)·JSON 은 필드 라벨까지 함께 돌려준다.
+
+    구조화 파싱이 실패하면 평문 추출로 안전하게 폴백한다(필드 라벨 없음).
+    그 외 포맷은 기존 extract_text 결과를 라벨 없는 ExtractedDoc 로 감싼다."""
+    path = Path(path)
+    ext = path.suffix.lower()
+    try:
+        if ext == ".csv":
+            return _doc_csv(path)
+        if ext == ".json":
+            return _doc_json(path)
+        if ext == ".xlsx":
+            return _doc_xlsx(path)
+        if ext == ".xls":
+            return _doc_xls(path)
+    except ExtractionError:
+        raise
+    except Exception:
+        # 구조 파싱 실패 → 평문으로 폴백(검출 자체는 계속 수행)
+        pass
+    return ExtractedDoc(extract_text(path, ocr_enabled=ocr_enabled), [])
+
+
+# ---------------------------------------------------------------------------
+# 구조 인식 추출 (표/JSON) — 필드 라벨 부착
+# ---------------------------------------------------------------------------
+def _doc_csv(path: Path) -> ExtractedDoc:
+    """CSV: 첫 비어있지 않은 행을 헤더로 삼아 각 셀에 컬럼 라벨을 부여."""
+    raw = path.read_bytes()
+    if not raw:
+        return ExtractedDoc("", [])
+    text = _decode_bytes(raw)
+    reader = csv.reader(io.StringIO(text))
+    rows = [r for r in reader]
+    header: list[str] = []
+    b = _DocBuilder()
+    for row in rows:
+        if not any(c.strip() for c in row):
+            continue
+        if not header:
+            header = [c.strip() for c in row]
+            continue
+        for i, cell in enumerate(row):
+            label = header[i] if i < len(header) else ""
+            b.add(cell, label)
+    return b.build()
+
+
+def _doc_json(path: Path) -> ExtractedDoc:
+    """JSON: 모든 말단 값에 그 키(객체) 또는 부모 키(배열)를 라벨로 부여."""
+    raw = path.read_bytes()
+    data = json.loads(_decode_bytes(raw)) if raw else {}
+    b = _DocBuilder()
+
+    def walk(node, label: str) -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, str(k))
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, label)
+        elif isinstance(node, bool) or node is None:
+            return
+        else:
+            b.add(node, label)
+
+    walk(data, "")
+    return b.build()
+
+
+def _doc_xlsx(path: Path) -> ExtractedDoc:
+    """XLSX: openpyxl 있으면 시트별 첫 행을 헤더로 구조 추출, 없으면 평문 폴백."""
+    try:
+        import openpyxl  # type: ignore
+    except ImportError:
+        return ExtractedDoc(_extract_xlsx_stdlib(path), [])
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    b = _DocBuilder()
+    try:
+        for ws in wb.worksheets:
+            header: list[str] = []
+            for row in ws.iter_rows(values_only=True):
+                cells = list(row)
+                if not any(c is not None and str(c).strip() for c in cells):
+                    continue
+                if not header:
+                    header = [("" if c is None else str(c).strip()) for c in cells]
+                    continue
+                for i, c in enumerate(cells):
+                    label = header[i] if i < len(header) else ""
+                    b.add(c, label)
+    finally:
+        wb.close()
+    return b.build()
+
+
+def _doc_xls(path: Path) -> ExtractedDoc:
+    """구형 XLS: xlrd 로 시트별 첫 행을 헤더로 구조 추출. 없으면 ExtractionError."""
+    try:
+        import xlrd  # type: ignore
+    except ImportError:
+        raise ExtractionError("xls 파싱에 xlrd 라이브러리가 필요합니다")
+    book = xlrd.open_workbook(path)
+    b = _DocBuilder()
+    for sheet in book.sheets():
+        header: list[str] = []
+        for r in range(sheet.nrows):
+            cells = sheet.row_values(r)
+            if not any(str(c).strip() for c in cells):
+                continue
+            if not header:
+                header = [str(c).strip() for c in cells]
+                continue
+            for i, c in enumerate(cells):
+                label = header[i] if i < len(header) else ""
+                b.add(c, label)
+    return b.build()
 
 
 # ---------------------------------------------------------------------------
