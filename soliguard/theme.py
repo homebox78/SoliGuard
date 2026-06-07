@@ -72,12 +72,14 @@ def build_qss(theme: str = "light") -> str:
     except Exception:
         fam = "Pretendard SG"
     return f"""
+    /* 배경은 QWidget 전역에 칠하지 않는다(커스텀 위젯이 카드 위에서 회색 박스로
+       보이는 현상 방지). 캔버스 배경은 창/다이얼로그에만 준다. */
     QWidget {{
-        background: {t['bg']};
         color: {t['text']};
         font-family: '{fam}';
         font-size: 13px;
     }}
+    QMainWindow, QDialog {{ background: {t['bg']}; }}
     QLabel {{ background: transparent; }}
 
     /* ---- 사이드바 (흰색) ---- */

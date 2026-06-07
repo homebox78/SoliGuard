@@ -1496,10 +1496,11 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(36, 28, 36, 28)
         lay.setSpacing(12)
         lay.addStretch()
-        badge = QLabel("✓")
-        badge.setFixedSize(72, 72)
+        badge = QLabel()
+        badge.setFixedSize(84, 84)
         badge.setAlignment(Qt.AlignCenter)
-        badge.setStyleSheet("background:#E7F6EC; color:#15A34A; border-radius:36px; font-size:34px; font-weight:800;")
+        badge.setStyleSheet("background:#E7F6EC; border-radius:42px;")
+        badge.setPixmap(icons.line_icon("checkCircle", 46, "#15A34A", 2))
         h = QHBoxLayout(); h.addStretch(); h.addWidget(badge); h.addStretch()
         lay.addLayout(h)
         t = QLabel("점검 완료")
@@ -1514,19 +1515,29 @@ class MainWindow(QMainWindow):
         stats = QHBoxLayout()
         stats.setSpacing(14)
         self._complete_stats = {}
-        for key, icon in [("mask", "마스킹"), ("quarantine", "격리"), ("delete", "완전삭제")]:
+        tiles = [("mask", "마스킹", "eyeOff", "#2563EB", "#EAF1FE"),
+                 ("quarantine", "격리", "lock", BRAND["brand"], BRAND["pink50"]),
+                 ("delete", "완전삭제", "trash", "#E11D2A", "#FDEAEA")]
+        for key, label, icn, color, bg in tiles:
             c = _card()
             cv = QVBoxLayout(c)
-            cv.setContentsMargins(20, 16, 20, 16)
+            cv.setContentsMargins(20, 18, 20, 18)
+            cv.setSpacing(4)
             cv.setAlignment(Qt.AlignCenter)
+            ibox = QLabel(); ibox.setFixedSize(38, 38); ibox.setAlignment(Qt.AlignCenter)
+            ibox.setStyleSheet(f"background:{bg}; border-radius:10px;")
+            ibox.setPixmap(icons.line_icon(icn, 19, color, 2))
+            ih = QHBoxLayout(); ih.addStretch(); ih.addWidget(ibox); ih.addStretch()
+            cv.addLayout(ih)
             num = QLabel("0")
             num.setAlignment(Qt.AlignCenter)
-            num.setStyleSheet("font-size:30px; font-weight:800;")
+            num.setStyleSheet("font-size:30px; font-weight:800; color:#8B92A0;"
+                              "font-family:'JetBrains Mono','D2Coding',monospace;")
             cv.addWidget(num)
-            lb = QLabel(icon); lb.setAlignment(Qt.AlignCenter)
-            lb.setStyleSheet("color:#565E6C; font-size:12px;")
+            lb = QLabel(label); lb.setAlignment(Qt.AlignCenter)
+            lb.setStyleSheet("color:#565E6C; font-size:12.5px; font-weight:600;")
             cv.addWidget(lb)
-            self._complete_stats[key] = num
+            self._complete_stats[key] = (num, color)
             stats.addWidget(c, 1)
         lay.addLayout(stats)
 
@@ -1567,11 +1578,23 @@ class MainWindow(QMainWindow):
         return w
 
     def _go_complete(self):
-        for key, lbl in self._complete_stats.items():
-            lbl.setText(str(self._action_counts.get(key, 0)))
+        for key, (lbl, color) in self._complete_stats.items():
+            n = self._action_counts.get(key, 0)
+            lbl.setText(str(n))
+            lbl.setStyleSheet(
+                f"font-size:30px; font-weight:800; color:{color if n else '#8B92A0'};"
+                "font-family:'JetBrains Mono','D2Coding',monospace;")
         before = getattr(self, "_scan_grade", "안전")
-        self._style_sev_label(self.cmp_before, {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(before, "낮음"))
-        self._style_sev_label(self.cmp_after, {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(before, "낮음"))
+        handled = sum(self._action_counts.values())
+        # 점검 후 등급: 처리로 남은 위험이 줄면 등급 재계산(간단화: 모두 처리 시 안전)
+        ls = (getattr(self.cfg, "last_scan", None) or {}) if self.cfg else {}
+        remaining = max(0, ls.get("total", 0) - handled)
+        after = before if remaining else "안전"
+        gmap = {"위험": "높음", "주의": "중간", "안전": "낮음"}
+        self._style_sev_label(self.cmp_before, gmap.get(before, "낮음"))
+        self.cmp_before.setText(f"● {before}")
+        self._style_sev_label(self.cmp_after, gmap.get(after, "낮음"))
+        self.cmp_after.setText(f"● {after}")
         self.stack.setCurrentWidget(self.complete)
 
     # -------------------------------------------------------- 격리함
