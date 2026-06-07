@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QFileDialog, QFrame, QGraphicsDropShadowEffect,
     QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton, QScrollArea,
@@ -472,8 +472,11 @@ class InstallerWizard(QWidget):
         row = QHBoxLayout(); row.setSpacing(8)
         self.path_edit = QLineEdit(r"C:\Program Files\SoliGuard")
         self.path_edit.setObjectName("Fld")
+        self.path_edit.setFixedHeight(42)
         row.addWidget(self.path_edit, 1)
         browse = QPushButton("  찾아보기"); browse.setObjectName("Ghost")
+        browse.setFixedHeight(42)
+        browse.setIcon(QIcon(icons.line_icon("folder", 15, "#565E6C")))
         browse.setCursor(Qt.PointingHandCursor)
         browse.clicked.connect(self._browse)
         row.addWidget(browse)
@@ -624,11 +627,12 @@ class InstallerWizard(QWidget):
         self.cancel_btn.clicked.connect(self.close)
         h.addWidget(self.cancel_btn)
         h.addStretch()
-        self.back_btn = QPushButton("  이전"); self.back_btn.setObjectName("Ghost")
+        self.back_btn = QPushButton(" 이전"); self.back_btn.setObjectName("Ghost")
+        self.back_btn.setIcon(QIcon(icons.line_icon("chevL", 15, "#565E6C", 2.4)))
         self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self._prev)
         h.addWidget(self.back_btn)
-        self.next_btn = QPushButton("다음  "); self.next_btn.setObjectName("Primary")
+        self.next_btn = QPushButton("다음 "); self.next_btn.setObjectName("Primary")
         self.next_btn.setCursor(Qt.PointingHandCursor)
         self.next_btn.clicked.connect(self._next)
         h.addWidget(self.next_btn)
@@ -646,12 +650,14 @@ class InstallerWizard(QWidget):
         self.cancel_btn.setVisible(self._index < 5)
         self.back_btn.setVisible(0 < self._index < 5)
         if self._index == 5:
-            self.next_btn.setText("  마침")
+            self.next_btn.setText("마침 ")
+            self.next_btn.setLayoutDirection(Qt.LeftToRight)
             self.next_btn.setIcon(self._icon("check"))
-        elif self._index == 3:
-            self.next_btn.setText("설치 시작  ")
         else:
-            self.next_btn.setText("다음  ")
+            # 다음/설치 시작: 셰브론을 오른쪽에 두기 위해 RTL 배치
+            self.next_btn.setText("설치 시작 " if self._index == 3 else "다음 ")
+            self.next_btn.setLayoutDirection(Qt.RightToLeft)
+            self.next_btn.setIcon(self._icon("chevR"))
         self.next_btn.setVisible(self._index != 4)
         self.next_btn.setEnabled(not (self._index == 1 and not self.agree))
 
