@@ -1774,21 +1774,40 @@ class MainWindow(QMainWindow):
         lay.addWidget(d)
         lay.addSpacing(6)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.q_scroll = QScrollArea()
+        self.q_scroll.setWidgetResizable(True)
+        self.q_scroll.setFrameShape(QFrame.NoFrame)
+        self.q_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         host = QWidget()
         self.q_list = QVBoxLayout(host)
         self.q_list.setContentsMargins(0, 0, 0, 0)
         self.q_list.setSpacing(10)
         self.q_list.addStretch()
-        scroll.setWidget(host)
-        lay.addWidget(scroll, 1)
-        self.q_empty = QLabel("격리된 파일이 없습니다.")
-        self.q_empty.setStyleSheet("color:#8B92A0; padding:24px 0;")
-        self.q_empty.setAlignment(Qt.AlignCenter)
-        lay.addWidget(self.q_empty)
+        self.q_scroll.setWidget(host)
+        lay.addWidget(self.q_scroll, 1)
+        # 빈 상태(아이콘 + 안내) — 콘텐츠 영역 세로 중앙
+        self.q_empty = self._empty_state(
+            "lock", "격리된 파일이 없습니다", "점검 결과에서 위험 항목을 격리하면 여기에 보관됩니다")
+        lay.addWidget(self.q_empty, 1)
+        return w
+
+    def _empty_state(self, icon: str, title: str, sub: str) -> QWidget:
+        """아이콘 + 제목 + 부제를 세로 중앙에 배치한 빈 상태 위젯."""
+        w = QWidget()
+        v = QVBoxLayout(w); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(10)
+        v.addStretch()
+        box = QLabel(); box.setFixedSize(64, 64); box.setAlignment(Qt.AlignCenter)
+        box.setStyleSheet("background:#F1F2F4; border-radius:18px;")
+        box.setPixmap(icons.line_icon(icon, 30, "#B0B6C2", 1.8))
+        bh = QHBoxLayout(); bh.addStretch(); bh.addWidget(box); bh.addStretch()
+        v.addLayout(bh)
+        t = QLabel(title); t.setAlignment(Qt.AlignCenter)
+        t.setStyleSheet("font-weight:700; font-size:14px; color:#8B92A0;")
+        v.addWidget(t)
+        s = QLabel(sub); s.setAlignment(Qt.AlignCenter)
+        s.setStyleSheet("color:#B0B6C2; font-size:12px;")
+        v.addWidget(s)
+        v.addStretch()
         return w
 
     def _refresh_quarantine(self):
@@ -1809,6 +1828,7 @@ class MainWindow(QMainWindow):
         for i, meta in enumerate(metas):
             self.q_list.insertWidget(i, self._quarantine_card(meta))
         self.q_empty.setVisible(not metas)
+        self.q_scroll.setVisible(bool(metas))
         # 사이드바 배지
         if hasattr(self, "_q_badge"):
             n = len(metas)
@@ -2311,12 +2331,12 @@ class MainWindow(QMainWindow):
         # 소프트 pill(테두리 없음) — 버튼처럼 보이지 않게 낮은 높이
         if sev is None:
             lbl.setStyleSheet("background:#F1F2F4; color:#8B92A0; border:none;"
-                              "border-radius:9px; padding:1px 9px; font-weight:700; font-size:11px;")
+                              "border-radius:2px; padding:2px 9px; font-weight:700; font-size:11px;")
             return
         color, bg, _line = SEV_CHIP.get(sev, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
         lbl.setText("● " + sev)
         lbl.setStyleSheet(f"background:{bg}; color:{color}; border:none;"
-                          "border-radius:9px; padding:1px 9px; font-weight:700; font-size:11px;")
+                          "border-radius:2px; padding:2px 9px; font-weight:700; font-size:11px;")
 
     # -------------------------------------------------------- 스캔 설정
     def _build_scanconfig(self) -> QWidget:
