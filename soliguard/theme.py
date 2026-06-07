@@ -90,6 +90,10 @@ def build_qss(theme: str = "light") -> str:
         font-size: 13px;
     }}
     QMainWindow, QDialog {{ background: {t['bg']}; }}
+    /* 콘텐츠 캔버스(사이드바 우측 영역) — 시스템 기본색 노출 방지 */
+    QWidget#Canvas {{ background: {t['bg']}; }}
+    QStackedWidget {{ background: transparent; }}
+    QScrollArea {{ background: transparent; }}
     QLabel {{ background: transparent; }}
 
     /* ---- 사이드바 (흰색) ---- */

@@ -709,7 +709,7 @@ class MainWindow(QMainWindow):
         self._prev_total = None
         self._hero_key = "donut"
 
-        root = QWidget()
+        root = QWidget(); root.setObjectName("Canvas")
         row = QHBoxLayout(root)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
@@ -2483,27 +2483,30 @@ class MainWindow(QMainWindow):
         items = [(k, True) for k in kinds]
         items.append(("이미지 속 정보(OCR)", ocr_on))
         items.append(("한글(HWP) 문서", True))
+        self.sc_kinds_grid.setColumnStretch(0, 1)
+        self.sc_kinds_grid.setColumnStretch(1, 1)
         for i, (text, on) in enumerate(items):
-            self.sc_kinds_grid.addWidget(self._kind_chip(text, on), i // 2, i % 2)
+            self.sc_kinds_grid.addWidget(self._kind_chip(text, on), i // 2, i % 2,
+                                         Qt.AlignLeft | Qt.AlignVCenter)
 
     def _kind_chip(self, text: str, on: bool) -> QFrame:
-        """검출 항목 칩 — on이면 크림슨 채움, off면 아웃라인."""
-        chip = QFrame()
+        """검출 항목 칩(내용폭, pill) — on이면 크림슨 채움, off면 아웃라인."""
+        chip = QFrame(); chip.setObjectName("Chip")
         h = QHBoxLayout(chip)
-        h.setContentsMargins(13, 7, 14, 7)
+        h.setContentsMargins(13, 6, 14, 6)
         h.setSpacing(7)
         if on:
-            chip.setStyleSheet(f"QFrame{{background:{BRAND['brand']}; border-radius:999px;}}")
+            chip.setStyleSheet(f"QFrame#Chip{{background:{BRAND['brand']}; border-radius:15px;}}")
             ic = "check"; iccolor = "#FFFFFF"; tcolor = "#FFFFFF"
         else:
-            chip.setStyleSheet("QFrame{background:#fff; border:1px solid #E7E9EE; border-radius:999px;}")
+            chip.setStyleSheet("QFrame#Chip{background:#fff; border:1px solid #E7E9EE; border-radius:15px;}")
             ic = "plus"; iccolor = "#8B92A0"; tcolor = "#565E6C"
-        icl = QLabel(); icl.setPixmap(icons.line_icon(ic, 14, iccolor, 2.6))
+        icl = QLabel(); icl.setFixedSize(14, 14)
+        icl.setPixmap(icons.line_icon(ic, 14, iccolor, 2.6))
         h.addWidget(icl)
         t = QLabel(text)
         t.setStyleSheet(f"color:{tcolor}; font-size:12.5px; font-weight:700; background:transparent;")
         h.addWidget(t)
-        h.addStretch()
         return chip
 
     def _refresh_folder_count(self):
