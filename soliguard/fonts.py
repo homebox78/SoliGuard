@@ -12,9 +12,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-FAMILY = "Pretendard"
+FAMILY = "Pretendard SG"   # 번들 전용 고유 패밀리(시스템 Pretendard와 충돌 차단)
 _WEIGHTS = ("Thin", "Light", "Regular", "Medium", "SemiBold", "Bold", "ExtraBold")
 _loaded_family: str | None = None
+
+
+def active_family() -> str:
+    return _loaded_family or FAMILY
 
 
 def _font_dir() -> Path:

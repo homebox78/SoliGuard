@@ -66,11 +66,16 @@ def severity_color(severity_value: str) -> str:
 def build_qss(theme: str = "light") -> str:
     t = TOKENS.get(theme, TOKENS["light"])
     b = BRAND
+    try:
+        from .fonts import active_family
+        fam = active_family()
+    except Exception:
+        fam = "Pretendard SG"
     return f"""
     QWidget {{
         background: {t['bg']};
         color: {t['text']};
-        font-family: 'Pretendard';
+        font-family: '{fam}';
         font-size: 13px;
     }}
     QLabel {{ background: transparent; }}
