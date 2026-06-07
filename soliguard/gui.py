@@ -43,6 +43,14 @@ _HIST_META = {
     "figma_scan": ("image", "Figma 검사", "scan"),
 }
 
+# 검출 유형 → 행 아이콘(결과 테이블)
+_TYPE_ICON = {
+    "주민등록번호": "user", "휴대전화번호": "phone", "전화번호": "phone",
+    "이메일": "mail", "신용카드번호": "card", "계좌번호": "card",
+    "사업자등록번호": "fileText", "API 키/시크릿": "key", "AWS Access Key": "key",
+    "DB 접속정보": "database", "개인키(PEM)": "key",
+}
+
 
 # ---------------------------------------------------------------- 공용 위젯
 def _h1(text: str) -> QLabel:
@@ -1180,53 +1188,58 @@ class MainWindow(QMainWindow):
 
     def _build_table_view(self) -> QWidget:
         w = QWidget()
-        body = QHBoxLayout(w)
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(14)
+        outer = QVBoxLayout(w)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(12)
 
-        filt = _card()
-        filt.setFixedWidth(180)
-        fl = QVBoxLayout(filt)
-        fl.setContentsMargins(16, 16, 16, 16)
-        fl.setSpacing(8)
-        fl.addWidget(self._mini_label("위험도"))
+        # 가로 필터 행(정본 08)
+        frow = QHBoxLayout(); frow.setSpacing(8)
+        flab = QLabel("위험도")
+        flab.setStyleSheet("color:#565E6C; font-size:12.5px; font-weight:700;")
+        frow.addWidget(flab)
         self._sev_buttons = {}
         for key in ["전체", "높음", "중간", "낮음"]:
-            b = QPushButton(key)
-            b.setObjectName("Ghost")
-            b.setCheckable(True)
+            b = QPushButton(key); b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
             b.clicked.connect(lambda _=False, k=key: self._set_sev_filter(k))
             self._sev_buttons[key] = b
-            fl.addWidget(b)
-        self._sev_buttons["전체"].setChecked(True)
-        fl.addWidget(self._mini_label("검색"))
+            frow.addWidget(b)
+        frow.addStretch()
+        fil = QLabel(); fil.setPixmap(icons.line_icon("list", 16, "#8B92A0", 2))
+        frow.addWidget(fil)
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("파일·유형 검색")
+        self.search_box.setPlaceholderText("전체 파일")
+        self.search_box.setFixedWidth(220)
         self.search_box.textChanged.connect(self._apply_filter)
-        fl.addWidget(self.search_box)
-        fl.addStretch()
-        body.addWidget(filt)
+        frow.addWidget(self.search_box)
+        self.tbl_count = QLabel("0건")
+        self.tbl_count.setStyleSheet("color:#8B92A0; font-size:12px; font-weight:600;")
+        frow.addWidget(self.tbl_count)
+        outer.addLayout(frow)
 
-        center = QVBoxLayout()
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["위험도", "파일 / 위치", "검출 항목", "검출값(마스킹)"])
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        self.table.itemSelectionChanged.connect(self._update_preview)
-        center.addWidget(self.table)
-        bar = QHBoxLayout()
-        for label, slot, obj in [("선택 마스킹", self._action_mask, "Ghost"),
-                                 ("선택 격리", self._action_quarantine, "Ghost"),
-                                 ("이건 오탐이에요", self._mark_false_positive, "Ghost"),
-                                 ("완전삭제", self._action_delete, "Danger")]:
-            b = QPushButton(label)
-            b.setObjectName(obj)
-            b.clicked.connect(slot)
-            bar.addWidget(b)
-        bar.addStretch()
-        center.addLayout(bar)
-        body.addLayout(center, 1)
+        body = QHBoxLayout(); body.setSpacing(14)
+        # 행 리스트 카드
+        listcard = _card()
+        lc = QVBoxLayout(listcard); lc.setContentsMargins(8, 10, 8, 8); lc.setSpacing(0)
+        hdr = QHBoxLayout(); hdr.setContentsMargins(12, 2, 12, 8); hdr.setSpacing(10)
+        self.tbl_all = QCheckBox(); self.tbl_all.stateChanged.connect(self._toggle_all_rows)
+        hdr.addWidget(self.tbl_all)
+        for txt, w_ in [("위험도", 56), ("파일 · 검출 항목", 0)]:
+            hl = QLabel(txt); hl.setStyleSheet("color:#8B92A0; font-size:11.5px; font-weight:700;")
+            if w_:
+                hl.setFixedWidth(w_)
+            hdr.addWidget(hl)
+        hdr.addStretch()
+        hr = QLabel("조치"); hr.setStyleSheet("color:#8B92A0; font-size:11.5px; font-weight:700;")
+        hdr.addWidget(hr)
+        lc.addLayout(hdr)
+        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setFrameShape(QFrame.NoFrame)
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        host = QWidget(); self.tbl_list = QVBoxLayout(host)
+        self.tbl_list.setContentsMargins(0, 0, 0, 0); self.tbl_list.setSpacing(4)
+        self.tbl_list.addStretch()
+        sc.setWidget(host); lc.addWidget(sc, 1)
+        body.addWidget(listcard, 1)
 
         self.preview = _card()
         self.preview.setFixedWidth(300)
@@ -1261,7 +1274,59 @@ class MainWindow(QMainWindow):
         pv.addWidget(self.pv_ctx)
         pv.addStretch()
         body.addWidget(self.preview)
+        outer.addLayout(body, 1)
+
+        # 하단 배치 조치 바
+        bar = QHBoxLayout(); bar.setSpacing(10)
+        for label, slot, obj, icn in [
+                ("선택 마스킹", self._action_mask, "Ghost", "eyeOff"),
+                ("선택 격리", self._action_quarantine, "Ghost", "lock"),
+                ("이건 오탐이에요", self._mark_false_positive, "Ghost", "check"),
+                ("완전삭제", self._action_delete, "Danger", "trash")]:
+            b = QPushButton("  " + label); b.setObjectName(obj)
+            b.setIcon(QIcon(icons.line_icon(icn, 15, "#fff" if obj == "Danger" else "#565E6C")))
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(slot)
+            bar.addWidget(b)
+        bar.addStretch()
+        outer.addLayout(bar)
         return w
+
+    def _table_row(self, path, finding):
+        row = QFrame(); row.setObjectName("TRow")
+        row.setStyleSheet(
+            "QFrame#TRow{border-radius:9px;border:1px solid transparent;}"
+            "QFrame#TRow:hover{background:#F7F8FA;}")
+        h = QHBoxLayout(row); h.setContentsMargins(10, 8, 8, 8); h.setSpacing(8)
+        chk = QCheckBox(); h.addWidget(chk)
+        chip = QLabel(); self._style_sev_label(chip, finding.severity.value)
+        chip.setFixedWidth(52); chip.setAlignment(Qt.AlignCenter)
+        h.addWidget(chip)
+        fic = QLabel(); fic.setFixedSize(17, 17)
+        fic.setPixmap(icons.line_icon(_TYPE_ICON.get(finding.info_type, "fileText"), 16, "#565E6C", 2))
+        h.addWidget(fic)
+        col = QVBoxLayout(); col.setSpacing(1)
+        t1 = QLabel(finding.info_type); t1.setStyleSheet("font-weight:700; font-size:12.5px;")
+        col.addWidget(t1)
+        t2 = QLabel(f"{path.name} · line {finding.line}")
+        t2.setStyleSheet("color:#8B92A0; font-size:11px;")
+        col.addWidget(t2)
+        h.addLayout(col, 1)
+        mv = QLabel(finding.masked)
+        mv.setStyleSheet("font-family:'JetBrains Mono','D2Coding',monospace; font-size:11.5px; color:#8B92A0;")
+        mv.setFixedWidth(96)
+        h.addWidget(mv)
+        h.addWidget(self._icon_btn("eyeOff", "마스킹", lambda _=False, p=path, f=finding: self._do_action("mask", p, [f])))
+        h.addWidget(self._icon_btn("lock", "격리", lambda _=False, p=path, f=finding: self._do_action("quarantine", p, [f])))
+        h.addWidget(self._icon_btn("trash", "삭제", lambda _=False, p=path, f=finding: self._do_action("delete", p, [f])))
+        row.mousePressEvent = lambda e, p=path, f=finding: self._show_preview(p, f)
+        return row, chk
+
+    def _toggle_all_rows(self, state):
+        checked = state == Qt.Checked.value if hasattr(Qt.Checked, "value") else bool(state)
+        for r in getattr(self, "tbl_rows", []):
+            if r["w"].isVisible():
+                r["chk"].setChecked(checked)
 
     def _build_group_view(self) -> QWidget:
         sc = QScrollArea()
@@ -1318,8 +1383,20 @@ class MainWindow(QMainWindow):
         return lbl
 
     def _set_sev_filter(self, key: str):
+        palette = {"전체": "#565E6C", "높음": "#E11D2A", "중간": "#E08600", "낮음": "#15A34A"}
         for k, b in self._sev_buttons.items():
-            b.setChecked(k == key)
+            on = k == key
+            b.setChecked(on)
+            if on:
+                b.setStyleSheet(
+                    f"QPushButton{{border:1px solid {BRAND['brand']};border-radius:8px;"
+                    f"padding:5px 12px;background:{BRAND['pink50']};color:{BRAND['brand']};"
+                    "font-weight:700;font-size:12px;}")
+            else:
+                b.setStyleSheet(
+                    f"QPushButton{{border:1px solid #E7E9EE;border-radius:8px;padding:5px 12px;"
+                    f"background:#fff;color:{palette[k]};font-weight:700;font-size:12px;}}"
+                    "QPushButton:hover{background:#F7F8FA;}")
         self._apply_filter()
 
     # -------------------------------------------------------- 완료
@@ -2365,22 +2442,33 @@ class MainWindow(QMainWindow):
                 self.save_report()
 
     def _populate_table(self, results):
-        self.table.setRowCount(0)
         self.row_index = []
+        self.tbl_rows = []
+        while self.tbl_list.count() > 1:
+            it = self.tbl_list.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        counts = {"높음": 0, "중간": 0, "낮음": 0}
+        idx = 0
         for r in results:
             for f in r.findings:
-                row = self.table.rowCount()
-                self.table.insertRow(row)
-                self.table.setItem(row, 0, QTableWidgetItem(f.severity.value))
-                self.table.setCellWidget(row, 0, _sev_chip(f.severity.value))
-                self.table.setItem(row, 1, QTableWidgetItem(str(r.path)))
-                self.table.setItem(row, 2, QTableWidgetItem(f.info_type))
-                self.table.setItem(row, 3, QTableWidgetItem(f.masked))
+                counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
+                roww, chk = self._table_row(Path(r.path), f)
+                self.tbl_list.insertWidget(idx, roww)
+                self.tbl_rows.append({
+                    "w": roww, "chk": chk, "path": Path(r.path), "f": f,
+                    "sev": f.severity.value,
+                    "text": f"{r.path} {f.info_type} {f.masked}".lower()})
                 self.row_index.append((Path(r.path), f))
-        if hasattr(self, "_sev_buttons"):
-            self._apply_filter()
+                idx += 1
+        # 필터 칩 카운트
+        for k in ["높음", "중간", "낮음"]:
+            self._sev_buttons[k].setText(f"{k} {counts[k]}")
         self._populate_group(results)
         self._populate_cards(results)
+        if hasattr(self, "tbl_all"):
+            self.tbl_all.setChecked(False)
+        self._set_sev_filter("전체")
 
     def _clear_layout(self, box, keep_stretch=False):
         while box.count():
@@ -2523,19 +2611,16 @@ class MainWindow(QMainWindow):
     def _apply_filter(self, *_):
         sev = next((k for k, b in self._sev_buttons.items() if b.isChecked()), "전체")
         q = self.search_box.text().strip().lower()
-        for row in range(self.table.rowCount()):
-            sev_v = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
-            text = " ".join(
-                self.table.item(row, c).text() if self.table.item(row, c) else ""
-                for c in range(1, self.table.columnCount())).lower()
-            show = (sev == "전체" or sev_v == sev) and (not q or q in text)
-            self.table.setRowHidden(row, not show)
+        shown = 0
+        for r in getattr(self, "tbl_rows", []):
+            show = (sev == "전체" or r["sev"] == sev) and (not q or q in r["text"])
+            r["w"].setVisible(show)
+            if show:
+                shown += 1
+        if hasattr(self, "tbl_count"):
+            self.tbl_count.setText(f"{shown}건")
 
-    def _update_preview(self):
-        rows = {i.row() for i in self.table.selectedIndexes()}
-        if not rows:
-            return
-        path, f = self.row_index[min(rows)]
+    def _show_preview(self, path, f):
         self.pv_file.setText(path.name)
         self.pv_path.setText(f"{path}  ·  line {f.line}")
         color, bg, line = SEV_CHIP.get(f.severity.value, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
@@ -2550,9 +2635,9 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------- 조치
     def _selected_by_file(self):
         grouped = {}
-        for idx in {i.row() for i in self.table.selectedIndexes()}:
-            path, finding = self.row_index[idx]
-            grouped.setdefault(path, []).append(finding)
+        for r in getattr(self, "tbl_rows", []):
+            if r["chk"].isChecked():
+                grouped.setdefault(r["path"], []).append(r["f"])
         return grouped
 
     def _require(self, grouped):
@@ -2602,20 +2687,20 @@ class MainWindow(QMainWindow):
         self._render_recent()
 
     def _mark_false_positive(self):
-        rows = sorted({i.row() for i in self.table.selectedIndexes()})
-        if not rows:
+        sel = [r for r in getattr(self, "tbl_rows", []) if r["chk"].isChecked()]
+        if not sel:
             QMessageBox.information(self, "SoliGuard", "오탐으로 표시할 행을 선택하세요.")
             return
         from .config import AppConfig
         cfg = self.cfg or AppConfig.load()
         wl = list(cfg.whitelist or [])
         added = 0
-        for r in rows:
-            _, f = self.row_index[r]
-            if f.raw not in wl:
-                wl.append(f.raw)
+        for r in sel:
+            raw = r["f"].raw
+            if raw not in wl:
+                wl.append(raw)
                 added += 1
-            self.table.setRowHidden(r, True)
+            r["w"].setVisible(False)
         cfg.whitelist = wl
         cfg.save()
         self.cfg = cfg
