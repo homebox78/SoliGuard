@@ -829,6 +829,8 @@ class MainWindow(QMainWindow):
         side = QWidget()
         side.setObjectName("Sidebar")
         side.setFixedWidth(232)
+        self._sidebar = side
+        self._sidebar_collapsed = False
         lay = QVBoxLayout(side)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
@@ -853,6 +855,17 @@ class MainWindow(QMainWindow):
         nm.addWidget(tag)
         bl.addLayout(nm)
         bl.addStretch()
+        self._side_toggle = QPushButton()
+        self._side_toggle.setObjectName("SideToggle")
+        self._side_toggle.setFixedSize(28, 28)
+        self._side_toggle.setCursor(Qt.PointingHandCursor)
+        self._side_toggle.setIcon(QIcon(icons.line_icon("chevL", 16, "#8B92A0")))
+        self._side_toggle.setToolTip("사이드바 접기")
+        self._side_toggle.setStyleSheet(
+            "QPushButton#SideToggle{background:transparent;border:none;border-radius:7px;}"
+            "QPushButton#SideToggle:hover{background:#F1F2F4;}")
+        self._side_toggle.clicked.connect(self._toggle_sidebar)
+        bl.addWidget(self._side_toggle, 0, Qt.AlignTop)
         lay.addWidget(brand)
 
         sec = QLabel("메뉴")
@@ -861,6 +874,7 @@ class MainWindow(QMainWindow):
 
         self.nav_group = QButtonGroup(self)
         self._nav_buttons = {}
+        self._nav_labels = {}
         navwrap = QWidget()
         nv = QVBoxLayout(navwrap)
         nv.setContentsMargins(12, 0, 12, 0)
@@ -878,6 +892,7 @@ class MainWindow(QMainWindow):
             b.clicked.connect(lambda _=False, k=key: self._navigate(k))
             self.nav_group.addButton(b)
             self._nav_buttons[key] = b
+            self._nav_labels[key] = label
             nv.addWidget(b)
         self._nav_buttons["dashboard"].setChecked(True)
         # 격리함 카운트 배지(정본 14)
@@ -928,7 +943,25 @@ class MainWindow(QMainWindow):
         wl.addWidget(chip)
         lay.addWidget(wrap)
         self._refresh_role_chip()
+        # 접기 시 숨길 텍스트성 위젯들(아이콘 메뉴만 남긴다)
+        self._side_hide = [name, tag, sec, trust, wrap]
         return side
+
+    def _toggle_sidebar(self):
+        """사이드바 접기/펼치기 — 접으면 아이콘 전용 좁은 레일."""
+        c = not getattr(self, "_sidebar_collapsed", False)
+        self._sidebar_collapsed = c
+        self._sidebar.setFixedWidth(60 if c else 232)
+        for wdg in getattr(self, "_side_hide", []):
+            wdg.setVisible(not c)
+        for key, b in self._nav_buttons.items():
+            b.setText("" if c else self._nav_labels[key])
+            b.setToolTip(self._nav_labels[key].strip() if c else "")
+        self._side_toggle.setIcon(
+            QIcon(icons.line_icon("chevR" if c else "chevL", 16, "#8B92A0")))
+        self._side_toggle.setToolTip("사이드바 펼치기" if c else "사이드바 접기")
+        self._q_badge.setVisible(not c and self._q_badge.text() not in ("", "0"))
+        self._position_q_badge()
 
     def _position_q_badge(self):
         if not hasattr(self, "_q_badge"):
@@ -1513,8 +1546,48 @@ class MainWindow(QMainWindow):
         frow.addWidget(self.tbl_count)
         outer.addLayout(frow)
 
-        body = QHBoxLayout(); body.setSpacing(14)
-        # 행 리스트 카드
+        # 마스킹 미리보기 — 목록 위쪽 가로형 패널(행 선택 시 표시).
+        # 우측 고정 패널을 없애 목록이 전체 폭을 쓰도록 한다.
+        self.preview = _card()
+        self.preview.setVisible(False)
+        pv = QHBoxLayout(self.preview)
+        pv.setContentsMargins(16, 12, 16, 14)
+        pv.setSpacing(16)
+        infow = QWidget(); infow.setFixedWidth(300)
+        info = QVBoxLayout(infow); info.setContentsMargins(0, 0, 0, 0); info.setSpacing(3)
+        info.addWidget(self._mini_label("마스킹 미리보기"))
+        self.pv_file = QLabel(""); self.pv_file.setWordWrap(True)
+        self.pv_file.setStyleSheet("font-weight:700; font-size:13.5px;")
+        info.addWidget(self.pv_file)
+        self.pv_path = QLabel(""); self.pv_path.setWordWrap(True)
+        self.pv_path.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+        info.addWidget(self.pv_path)
+        self.pv_type = QLabel("")
+        info.addWidget(self.pv_type)
+        info.addStretch()
+        pv.addWidget(infow)
+        self.pv_value = QLabel("")
+        self.pv_value.setFixedWidth(200)
+        self.pv_value.setAlignment(Qt.AlignCenter)
+        self.pv_value.setWordWrap(True)
+        self.pv_value.setStyleSheet(
+            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:15px;"
+            " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:14px 12px;")
+        pv.addWidget(self.pv_value)
+        ctxw = QWidget()
+        cvb = QVBoxLayout(ctxw); cvb.setContentsMargins(0, 0, 0, 0); cvb.setSpacing(6)
+        ctxlbl = QLabel("검출 위치 (마스킹됨)")
+        ctxlbl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+        cvb.addWidget(ctxlbl)
+        self.pv_ctx = QLabel(""); self.pv_ctx.setWordWrap(True)
+        self.pv_ctx.setStyleSheet(
+            "font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#CBD3E1;"
+            " background:#1B1E25; border-radius:10px; padding:12px;")
+        cvb.addWidget(self.pv_ctx, 1)
+        pv.addWidget(ctxw, 1)
+        outer.addWidget(self.preview)
+
+        # 행 리스트 카드(전체 폭 사용)
         listcard = _card()
         lc = QVBoxLayout(listcard); lc.setContentsMargins(8, 10, 8, 8); lc.setSpacing(0)
         hdr = QHBoxLayout(); hdr.setContentsMargins(12, 2, 12, 8); hdr.setSpacing(10)
@@ -1535,63 +1608,7 @@ class MainWindow(QMainWindow):
         self.tbl_list.setContentsMargins(0, 0, 0, 0); self.tbl_list.setSpacing(4)
         self.tbl_list.addStretch()
         sc.setWidget(host); lc.addWidget(sc, 1)
-        body.addWidget(listcard, 1)
-
-        self.preview = _card()
-        self.preview.setFixedWidth(300)
-        pv = QVBoxLayout(self.preview)
-        pv.setContentsMargins(18, 18, 18, 18)
-        pv.setSpacing(10)
-        pv.addWidget(self._mini_label("마스킹 미리보기"))
-
-        # 빈 상태(선택 전)
-        self.pv_empty = QWidget()
-        ev = QVBoxLayout(self.pv_empty); ev.setContentsMargins(0, 30, 0, 0); ev.setSpacing(10)
-        eic = QLabel(); eic.setAlignment(Qt.AlignCenter)
-        eic.setPixmap(icons.line_icon("eyeOff", 30, "#C9CFDA", 1.8))
-        ev.addWidget(eic)
-        et = QLabel("선택한 항목이 없습니다")
-        et.setAlignment(Qt.AlignCenter); et.setStyleSheet("font-weight:700; font-size:13px; color:#8B92A0;")
-        ev.addWidget(et)
-        es = QLabel("왼쪽 목록에서 행을 클릭하면\n마스킹 결과가 표시됩니다")
-        es.setAlignment(Qt.AlignCenter); es.setStyleSheet("color:#B0B6C2; font-size:11.5px;")
-        ev.addWidget(es); ev.addStretch()
-        pv.addWidget(self.pv_empty)
-
-        # 상세(선택 시)
-        self.pv_detail = QWidget()
-        dv = QVBoxLayout(self.pv_detail); dv.setContentsMargins(0, 0, 0, 0); dv.setSpacing(10)
-        self.pv_file = QLabel("")
-        self.pv_file.setStyleSheet("font-weight:700; font-size:13.5px;")
-        self.pv_file.setWordWrap(True)
-        dv.addWidget(self.pv_file)
-        self.pv_path = QLabel("")
-        self.pv_path.setStyleSheet("color:#8B92A0; font-size:11.5px;")
-        self.pv_path.setWordWrap(True)
-        dv.addWidget(self.pv_path)
-        self.pv_type = QLabel("")
-        dv.addWidget(self.pv_type)
-        self.pv_value = QLabel("")
-        self.pv_value.setAlignment(Qt.AlignCenter)
-        self.pv_value.setWordWrap(True)
-        self.pv_value.setStyleSheet(
-            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:15px; line-height:1.5;"
-            " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:16px 12px;")
-        dv.addWidget(self.pv_value)
-        ctxlbl = QLabel("검출 위치 (마스킹됨)")
-        ctxlbl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
-        dv.addWidget(ctxlbl)
-        self.pv_ctx = QLabel("")
-        self.pv_ctx.setWordWrap(True)
-        self.pv_ctx.setStyleSheet(
-            "font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#CBD3E1;"
-            " background:#1B1E25; border-radius:10px; padding:12px;")
-        dv.addWidget(self.pv_ctx)
-        self.pv_detail.setVisible(False)
-        pv.addWidget(self.pv_detail)
-        pv.addStretch()
-        body.addWidget(self.preview)
-        outer.addLayout(body, 1)
+        outer.addWidget(listcard, 1)
 
         # 하단 배치 조치 바
         bar = QHBoxLayout(); bar.setSpacing(10)
@@ -2842,10 +2859,9 @@ class MainWindow(QMainWindow):
         self._populate_cards(results)
         if hasattr(self, "tbl_all"):
             self.tbl_all.setChecked(False)
-        # 미리보기 빈 상태로 초기화
-        if hasattr(self, "pv_empty"):
-            self.pv_empty.setVisible(True)
-            self.pv_detail.setVisible(False)
+        # 미리보기 숨김(행 선택 시 상단에 표시)
+        if hasattr(self, "preview"):
+            self.preview.setVisible(False)
         self._set_sev_filter("전체")
 
     def _clear_layout(self, box, keep_stretch=False):
@@ -3010,8 +3026,7 @@ class MainWindow(QMainWindow):
             self.tbl_count.setText(f"{shown}건")
 
     def _show_preview(self, path, f):
-        self.pv_empty.setVisible(False)
-        self.pv_detail.setVisible(True)
+        self.preview.setVisible(True)
         self.pv_file.setText(path.name)
         self.pv_path.setText(f"{path}  ·  line {f.line}")
         color, bg, line = SEV_CHIP.get(f.severity.value, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
