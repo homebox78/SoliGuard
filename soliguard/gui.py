@@ -1964,18 +1964,17 @@ class MainWindow(QMainWindow):
         lay.addLayout(head)
         lay.addSpacing(6)
 
-        scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.h_scroll = QScrollArea(); self.h_scroll.setWidgetResizable(True)
+        self.h_scroll.setFrameShape(QFrame.NoFrame)
+        self.h_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         host = QWidget(); self.h_list = QVBoxLayout(host)
         self.h_list.setContentsMargins(0, 0, 0, 0); self.h_list.setSpacing(10)
         self.h_list.addStretch()
-        scroll.setWidget(host)
-        lay.addWidget(scroll, 1)
-        self.h_empty = QLabel("아직 기록된 점검 이력이 없습니다.")
-        self.h_empty.setAlignment(Qt.AlignCenter)
-        self.h_empty.setStyleSheet("color:#8B92A0; padding:24px 0;")
-        lay.addWidget(self.h_empty)
+        self.h_scroll.setWidget(host)
+        lay.addWidget(self.h_scroll, 1)
+        self.h_empty = self._empty_state(
+            "history", "기록된 점검 이력이 없습니다", "점검·조치를 실행하면 여기에 시간순으로 쌓입니다")
+        lay.addWidget(self.h_empty, 1)
         self._set_hist_filter("all")
         return w
 
@@ -2006,6 +2005,7 @@ class MainWindow(QMainWindow):
             self.h_list.insertWidget(shown, self._history_card(e, icn, title, kind))
             shown += 1
         self.h_empty.setVisible(shown == 0)
+        self.h_scroll.setVisible(shown > 0)
 
     def _history_card(self, e: dict, icn: str, title: str, kind: str) -> QFrame:
         from pathlib import Path as _P
