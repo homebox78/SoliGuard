@@ -1850,11 +1850,12 @@ class MainWindow(QMainWindow):
         tm.setStyleSheet("color:#8B92A0; font-size:11px;")
         meta_col.addWidget(tm)
         h.addLayout(meta_col)
-        # 심각도 칩
+        # 심각도 칩 — 값이 있을 때만 표시(없으면 빈 회색 박스 방지)
         sev = meta.get("severity") or None
-        chip = QLabel()
-        self._style_sev_label(chip, sev)
-        h.addWidget(chip)
+        if sev:
+            chip = QLabel()
+            self._style_sev_label(chip, sev)
+            h.addWidget(chip)
         # 복원 버튼
         qid = meta.get("id", "")
         restore = QPushButton("  복원"); restore.setObjectName("Ghost")
