@@ -283,49 +283,66 @@ class ScanWorker(QThread):
 
 
 # ---------------------------------------------------------------- 직무 팝오버
+def _checkbox_pixmap(on: bool, size: int = 20):
+    """둥근 사각 체크박스 픽스맵(정본 Box sq)."""
+    from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+    pm = QPixmap(size, size); pm.fill(Qt.transparent)
+    p = QPainter(pm); p.setRenderHint(QPainter.Antialiasing, True)
+    p.setPen(QPen(QColor(BRAND["brand"] if on else "#D6DAE2"), 1.7))
+    p.setBrush(QColor(BRAND["brand"]) if on else QColor("#FFFFFF"))
+    p.drawRoundedRect(1, 1, size - 2, size - 2, 6, 6)
+    if on:
+        p.drawPixmap(2, 2, icons.line_icon("check", size - 4, "#FFFFFF", 3))
+    p.end()
+    return pm
+
+
+def _icon_box_pixmap(name: str, on: bool, size: int = 34):
+    """라운드 사각 안에 Lucide 아이콘(선택 시 크림슨 채움+흰 아이콘)."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QColor, QPainter, QPixmap
+    pm = QPixmap(size, size); pm.fill(Qt.transparent)
+    p = QPainter(pm); p.setRenderHint(QPainter.Antialiasing, True)
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(BRAND["brand"]) if on else QColor("#F7F8FA"))
+    p.drawRoundedRect(QRectF(0, 0, size, size), 9, 9)
+    ic = icons.line_icon(name, round(size * 0.55), "#FFFFFF" if on else "#565E6C", 2)
+    off = (size - ic.width()) // 2
+    p.drawPixmap(off, off, ic)
+    p.end()
+    return pm
+
+
 class RolePopover(QDialog):
-    """직무 프로파일 복수 선택 다이얼로그(사이드바 칩에서 호출)."""
+    """직무 프로파일 복수 선택(정본 18) — 체크박스+아이콘박스+이름·설명 카드."""
 
     def __init__(self, parent, profiles):
         super().__init__(parent)
         self.setWindowTitle("직무 프로파일")
         self.setModal(True)
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(400)
         self.selected = list(profiles)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(18, 16, 18, 14)
-        lay.setSpacing(8)
-        title = QLabel("직무 프로파일  (복수 선택)")
-        title.setStyleSheet("font-size:15px; font-weight:800;")
-        lay.addWidget(title)
-        hint = QLabel("선택한 모든 직무의 폴더·검출 항목이 합쳐서 구성됩니다.")
-        hint.setStyleSheet("color:#565E6C; font-size:12px;")
-        lay.addWidget(hint)
+        lay.setContentsMargins(20, 18, 20, 16)
+        lay.setSpacing(9)
 
-        self._checks = {}
+        thead = QHBoxLayout(); thead.setSpacing(8)
+        title = QLabel("직무 프로파일")
+        title.setStyleSheet("font-size:16px; font-weight:800;")
+        thead.addWidget(title)
+        badge = QLabel("복수 선택")
+        badge.setStyleSheet(f"background:{BRAND['pink50']}; color:{BRAND['brand']};"
+                            "border-radius:9px; padding:3px 9px; font-size:11px; font-weight:700;")
+        thead.addWidget(badge); thead.addStretch()
+        lay.addLayout(thead)
+        hint = QLabel("선택한 모든 직무의 폴더·검출 항목이 합쳐서 구성됩니다.")
+        hint.setStyleSheet("color:#565E6C; font-size:12.5px;")
+        lay.addWidget(hint)
+        lay.addSpacing(2)
+
+        self._cards = {}
         for role in ALL_PROFILES:
-            row = QFrame()
-            row.setObjectName("Card")
-            rl = QHBoxLayout(row)
-            rl.setContentsMargins(12, 9, 12, 9)
-            icon = QLabel(PROFILE_ICON.get(role, "•"))
-            icon.setStyleSheet("font-size:18px;")
-            rl.addWidget(icon)
-            col = QVBoxLayout()
-            col.setSpacing(1)
-            nm = QLabel(role)
-            nm.setStyleSheet("font-weight:700; font-size:13.5px;")
-            col.addWidget(nm)
-            ds = QLabel(PROFILE_DESC.get(role, ""))
-            ds.setStyleSheet("color:#565E6C; font-size:12px;")
-            ds.setWordWrap(True)
-            col.addWidget(ds)
-            rl.addLayout(col, 1)
-            chk = QCheckBox()
-            chk.setChecked(role in self.selected)
-            rl.addWidget(chk)
-            self._checks[role] = chk
-            lay.addWidget(row)
+            lay.addWidget(self._role_card(role))
 
         foot = QHBoxLayout()
         self._count = QLabel()
@@ -334,19 +351,58 @@ class RolePopover(QDialog):
         foot.addStretch()
         apply_btn = QPushButton("적용")
         apply_btn.setObjectName("Primary")
+        apply_btn.setCursor(Qt.PointingHandCursor)
         apply_btn.clicked.connect(self._apply)
         foot.addWidget(apply_btn)
+        lay.addSpacing(4)
         lay.addLayout(foot)
-        for c in self._checks.values():
-            c.toggled.connect(self._refresh_count)
         self._refresh_count()
 
+    def _role_card(self, role: str) -> QPushButton:
+        on = role in self.selected
+        b = QPushButton(); b.setObjectName("ChkCard")
+        b.setCheckable(True); b.setChecked(on)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setMinimumHeight(62)
+        b.setStyleSheet(
+            "QPushButton#ChkCard{background:#fff;border:1px solid #E7E9EE;"
+            "border-radius:12px;text-align:left;padding:0;}"
+            "QPushButton#ChkCard:hover{border-color:#D6DAE2;}"
+            f"QPushButton#ChkCard:checked{{border:1px solid {BRAND['brand']};"
+            f"background:{BRAND['pink50']};}}")
+        h = QHBoxLayout(b); h.setContentsMargins(13, 11, 13, 11); h.setSpacing(12)
+        chk = QLabel(); chk.setFixedSize(20, 20); chk.setPixmap(_checkbox_pixmap(on))
+        h.addWidget(chk, 0, Qt.AlignVCenter)
+        ic_name = icons.ROLE_ICON.get(role, "user")
+        ibox = QLabel(); ibox.setFixedSize(34, 34)
+        ibox.setPixmap(_icon_box_pixmap(ic_name, on))
+        h.addWidget(ibox, 0, Qt.AlignVCenter)
+        col = QVBoxLayout(); col.setSpacing(2); col.setContentsMargins(0, 0, 0, 0)
+        nm = QLabel(role)
+        nm.setStyleSheet(f"font-weight:700; font-size:13.5px;"
+                         f"color:{BRAND['brand'] if on else '#14161C'};")
+        col.addWidget(nm)
+        ds = QLabel(PROFILE_DESC.get(role, ""))
+        ds.setStyleSheet("color:#565E6C; font-size:12px;")
+        col.addWidget(ds)
+        h.addLayout(col, 1)
+
+        def toggle(checked, r=role, cb=chk, ib=ibox, name=nm, icn=ic_name):
+            cb.setPixmap(_checkbox_pixmap(checked))
+            ib.setPixmap(_icon_box_pixmap(icn, checked))
+            name.setStyleSheet(f"font-weight:700; font-size:13.5px;"
+                               f"color:{BRAND['brand'] if checked else '#14161C'};")
+            self._refresh_count()
+        b.toggled.connect(toggle)
+        self._cards[role] = b
+        return b
+
     def _refresh_count(self):
-        n = sum(1 for c in self._checks.values() if c.isChecked())
+        n = sum(1 for b in self._cards.values() if b.isChecked())
         self._count.setText(f"{n}개 직무 선택됨")
 
     def _apply(self):
-        sel = [r for r in ALL_PROFILES if self._checks[r].isChecked()]
+        sel = [r for r in ALL_PROFILES if self._cards[r].isChecked()]
         self.selected = sel or [ALL_PROFILES[0]]
         self.accept()
 
@@ -495,10 +551,8 @@ class MainWindow(QMainWindow):
         name = QLabel('솔리<span style="color:%s;font-weight:800;">가드</span>' % BRAND["brand"])
         name.setStyleSheet("font-size:16px; font-weight:800;")
         nm.addWidget(name)
-        _appfont = (QApplication.instance().font().family()
-                    if QApplication.instance() else "?")
-        tag = QLabel("SoliGuard · v" + getattr(__import__("soliguard"), "__version__", "1.0")
-                     + " · " + _appfont)
+        tag = QLabel("SoliGuard · v"
+                     + getattr(__import__("soliguard"), "__version__", "1.0"))
         tag.setStyleSheet("font-size:10.5px; color:#8B92A0;")
         nm.addWidget(tag)
         bl.addLayout(nm)
@@ -530,6 +584,13 @@ class MainWindow(QMainWindow):
             self._nav_buttons[key] = b
             nv.addWidget(b)
         self._nav_buttons["dashboard"].setChecked(True)
+        # 격리함 카운트 배지(정본 14)
+        qbtn = self._nav_buttons["quarantine"]
+        self._q_badge = QLabel("0", qbtn)
+        self._q_badge.setStyleSheet(
+            f"background:{BRAND['brand']}; color:#fff; border-radius:9px;"
+            "font-size:10.5px; font-weight:700; padding:1px 7px;")
+        self._q_badge.hide()
         lay.addWidget(navwrap)
 
         lay.addStretch()
@@ -571,6 +632,23 @@ class MainWindow(QMainWindow):
         lay.addWidget(wrap)
         self._refresh_role_chip()
         return side
+
+    def _position_q_badge(self):
+        if not hasattr(self, "_q_badge"):
+            return
+        b = self._nav_buttons["quarantine"]
+        self._q_badge.adjustSize()
+        bw = self._q_badge.width()
+        self._q_badge.move(b.width() - bw - 12,
+                           (b.height() - self._q_badge.height()) // 2)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._refresh_quarantine()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._position_q_badge()
 
     def _refresh_role_chip(self):
         n = len(self.profiles)
@@ -1148,55 +1226,146 @@ class MainWindow(QMainWindow):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(36, 28, 36, 28)
-        lay.setSpacing(14)
+        lay.setSpacing(8)
         lay.addWidget(_h1("격리함"))
-        d = QLabel("암호화되어 보관 중인 파일입니다. 선택해 원래 위치로 복원할 수 있습니다.")
-        d.setStyleSheet("color:#565E6C;")
+        d = QLabel("격리된 파일은 암호화되어 안전하게 보관됩니다. 언제든 원래 위치로 복원할 수 있어요.")
+        d.setStyleSheet("color:#565E6C; font-size:13px;")
         lay.addWidget(d)
-        self.q_table = QTableWidget(0, 3)
-        self.q_table.setHorizontalHeaderLabels(["원본 경로", "격리 일시", "ID"])
-        self.q_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.q_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.q_table.verticalHeader().setVisible(False)
-        lay.addWidget(self.q_table)
-        bar = QHBoxLayout()
-        bar.addStretch()
-        restore = QPushButton("↩  원래 위치로 복원")
-        restore.setObjectName("Primary")
-        restore.clicked.connect(self._restore_selected)
-        bar.addWidget(restore)
-        lay.addLayout(bar)
+        lay.addSpacing(6)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        host = QWidget()
+        self.q_list = QVBoxLayout(host)
+        self.q_list.setContentsMargins(0, 0, 0, 0)
+        self.q_list.setSpacing(10)
+        self.q_list.addStretch()
+        scroll.setWidget(host)
+        lay.addWidget(scroll, 1)
+        self.q_empty = QLabel("격리된 파일이 없습니다.")
+        self.q_empty.setStyleSheet("color:#8B92A0; padding:24px 0;")
+        self.q_empty.setAlignment(Qt.AlignCenter)
+        lay.addWidget(self.q_empty)
         return w
 
     def _refresh_quarantine(self):
         from . import actions
-        self.q_table.setRowCount(0)
+        # 기존 카드 제거(끝의 stretch는 유지)
+        while self.q_list.count() > 1:
+            it = self.q_list.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
         qdir = actions.QUARANTINE_DIR
-        if not qdir.exists():
-            return
-        for mf in sorted(qdir.glob("*.meta.json")):
+        metas = []
+        if qdir.exists():
+            for mf in sorted(qdir.glob("*.meta.json")):
+                try:
+                    metas.append(json.loads(mf.read_text(encoding="utf-8")))
+                except (json.JSONDecodeError, OSError):
+                    continue
+        for i, meta in enumerate(metas):
+            self.q_list.insertWidget(i, self._quarantine_card(meta))
+        self.q_empty.setVisible(not metas)
+        # 사이드바 배지
+        if hasattr(self, "_q_badge"):
+            n = len(metas)
+            self._q_badge.setText(str(n))
+            self._q_badge.setVisible(n > 0)
+            self._position_q_badge()
+
+    def _quarantine_card(self, meta: dict) -> QFrame:
+        from pathlib import Path as _P
+        card = QFrame(); card.setObjectName("Card")
+        h = QHBoxLayout(card)
+        h.setContentsMargins(16, 13, 16, 13)
+        h.setSpacing(13)
+        # 잠금 아이콘 박스
+        lk = QLabel(); lk.setFixedSize(44, 44); lk.setAlignment(Qt.AlignCenter)
+        lk.setStyleSheet(f"background:{BRAND['pink50']}; border-radius:11px;")
+        lk.setPixmap(icons.line_icon("lock", 22, BRAND["brand"], 2))
+        h.addWidget(lk)
+        # 파일명 + 경로
+        path = meta.get("original_path", "")
+        info = QVBoxLayout(); info.setSpacing(2)
+        fn = QLabel(_P(path).name or path)
+        fn.setStyleSheet("font-weight:800; font-size:13.5px;")
+        info.addWidget(fn)
+        pl = QLabel(path)
+        pl.setStyleSheet("color:#8B92A0; font-size:11px;")
+        info.addWidget(pl)
+        h.addLayout(info, 1)
+        # 유형 + 시간
+        meta_col = QVBoxLayout(); meta_col.setSpacing(2)
+        it = QLabel(meta.get("info_type") or "기타")
+        it.setStyleSheet("font-size:12.5px; color:#14161C;")
+        meta_col.addWidget(it)
+        tm = QLabel(self._rel_time(meta.get("quarantined_at", "")))
+        tm.setStyleSheet("color:#8B92A0; font-size:11px;")
+        meta_col.addWidget(tm)
+        h.addLayout(meta_col)
+        # 심각도 칩
+        sev = meta.get("severity") or None
+        chip = QLabel()
+        self._style_sev_label(chip, sev)
+        h.addWidget(chip)
+        # 복원 버튼
+        qid = meta.get("id", "")
+        restore = QPushButton("  복원"); restore.setObjectName("Ghost")
+        restore.setIcon(QIcon(icons.line_icon("refresh", 14, "#565E6C", 2.2)))
+        restore.setCursor(Qt.PointingHandCursor)
+        restore.clicked.connect(lambda _=False, q=qid: self._restore_one(q))
+        h.addWidget(restore)
+        # 삭제 아이콘
+        dele = QPushButton(); dele.setObjectName("IconBtn")
+        dele.setFixedSize(34, 34)
+        dele.setIcon(QIcon(icons.line_icon("trash", 17, "#E11D2A", 2)))
+        dele.setCursor(Qt.PointingHandCursor)
+        dele.setStyleSheet("QPushButton#IconBtn{background:transparent;border:1px solid #E7E9EE;"
+                           "border-radius:9px;} QPushButton#IconBtn:hover{background:#FDEAEA;border-color:#F6C4C4;}")
+        dele.clicked.connect(lambda _=False, q=qid: self._delete_quarantine(q))
+        h.addWidget(dele)
+        return card
+
+    @staticmethod
+    def _rel_time(iso: str) -> str:
+        if not iso:
+            return ""
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(iso)
+            delta = datetime.now() - dt
+            secs = delta.total_seconds()
+            if secs < 60:
+                return "방금"
+            if secs < 3600:
+                return f"{int(secs // 60)}분 전"
+            if secs < 86400:
+                return f"{int(secs // 3600)}시간 전"
+            return dt.strftime("%m/%d %H:%M")
+        except ValueError:
+            return iso
+
+    def _restore_one(self, qid: str):
+        from .actions import restore_file
+        if restore_file(qid).status == "success":
+            self._toast("원래 위치로 복원했습니다")
+        self._refresh_quarantine()
+
+    def _delete_quarantine(self, qid: str):
+        from . import actions
+        for suffix in (".enc", ".meta.json"):
+            p = actions.QUARANTINE_DIR / f"{qid}{suffix}"
             try:
-                meta = json.loads(mf.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-            r = self.q_table.rowCount()
-            self.q_table.insertRow(r)
-            self.q_table.setItem(r, 0, QTableWidgetItem(meta.get("original_path", "")))
-            self.q_table.setItem(r, 1, QTableWidgetItem(meta.get("quarantined_at", "")))
-            self.q_table.setItem(r, 2, QTableWidgetItem(meta.get("id", "")))
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+        self._toast("격리함에서 삭제했습니다")
+        self._refresh_quarantine()
 
     def _restore_selected(self):
-        rows = {i.row() for i in self.q_table.selectedIndexes()}
-        if not rows:
-            QMessageBox.information(self, "SoliGuard", "복원할 항목을 선택하세요.")
-            return
-        from .actions import restore_file
-        ok = 0
-        for r in rows:
-            it = self.q_table.item(r, 2)
-            if it and restore_file(it.text()).status == "success":
-                ok += 1
-        QMessageBox.information(self, "복원 완료", f"{ok}개 파일을 원래 위치로 복원했습니다.")
         self._refresh_quarantine()
 
     # -------------------------------------------------------- 점검 이력
@@ -1542,6 +1711,28 @@ class MainWindow(QMainWindow):
         self.sc_sub.setStyleSheet("color:#565E6C; font-size:13px;")
         lay.addWidget(self.sc_sub)
 
+        # 전체 스캔 범위 카드 (정본 04)
+        scope = _card()
+        scl = QHBoxLayout(scope)
+        scl.setContentsMargins(20, 16, 20, 16)
+        scl.setSpacing(14)
+        self.sc_scope_icon = QLabel()
+        self.sc_scope_icon.setFixedSize(48, 48)
+        self.sc_scope_icon.setAlignment(Qt.AlignCenter)
+        self.sc_scope_icon.setStyleSheet(
+            f"background:{BRAND['brand']}; border-radius:12px;")
+        self.sc_scope_icon.setPixmap(icons.line_icon("search", 24, "#FFFFFF", 2.2))
+        scl.addWidget(self.sc_scope_icon)
+        sct = QVBoxLayout(); sct.setSpacing(2)
+        self.sc_scope_title = QLabel("전체 스캔")
+        self.sc_scope_title.setStyleSheet("font-size:15px; font-weight:800;")
+        sct.addWidget(self.sc_scope_title)
+        self.sc_scope_desc = QLabel("지정한 폴더와 드라이브를 빠짐없이 검사합니다")
+        self.sc_scope_desc.setStyleSheet("color:#565E6C; font-size:12.5px;")
+        sct.addWidget(self.sc_scope_desc)
+        scl.addLayout(sct, 1)
+        lay.addWidget(scope)
+
         cols = QHBoxLayout()
         cols.setSpacing(18)
         # 폴더
@@ -1549,13 +1740,17 @@ class MainWindow(QMainWindow):
         fl = QVBoxLayout(fcard)
         fl.setContentsMargins(20, 16, 20, 16)
         fl.setSpacing(8)
-        fh = QHBoxLayout()
+        fh = QHBoxLayout(); fh.setSpacing(8)
         ft = QLabel("스캔 대상 폴더")
         ft.setStyleSheet("font-size:15px; font-weight:800;")
         fh.addWidget(ft)
+        self.sc_folder_count = QLabel("")
+        self.sc_folder_count.setStyleSheet("color:#8B92A0; font-size:12px; font-weight:600;")
+        fh.addWidget(self.sc_folder_count)
         fh.addStretch()
-        addf = QPushButton("＋ 폴더 추가")
+        addf = QPushButton("  폴더 추가")
         addf.setObjectName("Ghost")
+        addf.setIcon(QIcon(icons.line_icon("plus", 15, "#565E6C", 2.4)))
         addf.clicked.connect(self._add_scan_folder)
         fh.addWidget(addf)
         fl.addLayout(fh)
@@ -1564,17 +1759,27 @@ class MainWindow(QMainWindow):
         fl.addLayout(self.sc_folder_box)
         fl.addStretch()
         cols.addWidget(fcard, 1)
-        # 검출 항목(직무 기반, 표시용)
+        # 검출 항목(직무 기반) — 크림슨 pill 칩
         kcard = _card()
         kl = QVBoxLayout(kcard)
         kl.setContentsMargins(20, 16, 20, 16)
+        kl.setSpacing(4)
+        kh = QHBoxLayout(); kh.setSpacing(8)
         kt = QLabel("검출할 항목")
         kt.setStyleSheet("font-size:15px; font-weight:800;")
-        kl.addWidget(kt)
-        self.sc_kinds = QLabel("")
-        self.sc_kinds.setWordWrap(True)
-        self.sc_kinds.setStyleSheet("color:#14161C; font-size:13px; line-height:1.7;")
-        kl.addWidget(self.sc_kinds)
+        kh.addWidget(kt)
+        self.sc_kind_count = QLabel("")
+        self.sc_kind_count.setStyleSheet("color:#8B92A0; font-size:12px; font-weight:600;")
+        kh.addWidget(self.sc_kind_count)
+        kh.addStretch()
+        kl.addLayout(kh)
+        self.sc_kind_sub = QLabel("")
+        self.sc_kind_sub.setStyleSheet("color:#8B92A0; font-size:12px;")
+        kl.addWidget(self.sc_kind_sub)
+        self.sc_kinds_grid = QGridLayout()
+        self.sc_kinds_grid.setSpacing(8)
+        self.sc_kinds_grid.setContentsMargins(0, 8, 0, 0)
+        kl.addLayout(self.sc_kinds_grid)
         kl.addStretch()
         cols.addWidget(kcard, 1)
         lay.addLayout(cols, 1)
@@ -1599,12 +1804,20 @@ class MainWindow(QMainWindow):
     def _go_scanconfig(self, scope: str):
         self._scan_scope = scope
         self._closing_mode = (scope == "closing")
-        meta = {"full": "전체 스캔 — 지정한 폴더를 빠짐없이 검사합니다",
-                "quick": "빠른 점검 — 위험 폴더만 빠르게 훑습니다",
-                "closing": "프로젝트 클로징 점검 — 프로젝트 폴더의 잔여 발주처 데이터를 일괄 점검합니다"}[scope]
-        self.sc_sub.setText(f"직무 “{', '.join(self.profiles)}” 기준 기본값입니다. · {meta}")
+        scope_meta = {
+            "full": ("search", "전체 스캔", "지정한 폴더와 드라이브를 빠짐없이 검사합니다"),
+            "quick": ("bolt", "빠른 점검", "위험 폴더만 빠르게 훑습니다"),
+            "closing": ("archive", "프로젝트 클로징 점검",
+                        "프로젝트 폴더의 잔여 발주처 데이터를 일괄 점검합니다"),
+        }[scope]
+        self.sc_scope_icon.setPixmap(icons.line_icon(scope_meta[0], 24, "#FFFFFF", 2.2))
+        self.sc_scope_title.setText(scope_meta[1])
+        self.sc_scope_desc.setText(scope_meta[2])
+        self.sc_sub.setText(
+            f"직무 “{', '.join(self.profiles)}” 프로파일 기준으로 기본값이 채워졌어요. "
+            "그대로 시작해도 됩니다.")
         # 추천 폴더 구성
-        from .profiles import PROFILE_EXTENSIONS, PROFILE_FOLDERS
+        from .profiles import PROFILE_FOLDERS
         names, seen = [], set()
         for role in self.profiles:
             for n in PROFILE_FOLDERS.get(role, []):
@@ -1620,31 +1833,76 @@ class MainWindow(QMainWindow):
             p = home / n
             on = p.exists() and (scope != "quick" or idx < 2)
             self._add_folder_row(str(p), on)
-        # 검출 항목(직무 합집합 확장자)
-        exts = set()
-        for role in self.profiles:
-            exts |= PROFILE_EXTENSIONS.get(role, set())
+        self._refresh_folder_count()
+        # 검출 항목(직무 기반) — 크림슨 pill 칩
         kinds = ["주민등록번호", "신용카드", "전화·이메일", "계좌번호", "사업자번호"]
         if "개발자" in self.profiles:
-            kinds.append("DB·API키(엔트로피 검증)")
-        if any(self.cfg and getattr(self.cfg, "ocr_mode", "local") != "off" for _ in [0]):
-            kinds.append("이미지 속 정보(OCR)")
-        self.sc_kinds.setText("✓ " + "\n✓ ".join(kinds) +
-                              f"\n\n파일 형식: {', '.join(sorted(e.lstrip('.') for e in exts))}")
+            kinds.append("DB·API키")
+        ocr_on = bool(self.cfg and getattr(self.cfg, "ocr_mode", "local") != "off")
+        self._fill_kind_chips(kinds, ocr_on)
+        self.sc_kind_count.setText(f"{len(kinds) + (1 if ocr_on else 0)}개 항목")
+        self.sc_kind_sub.setText(f"직무: {', '.join(self.profiles)} 기본값")
         self._select_nav("dashboard")
         self.stack.setCurrentWidget(self.scanconfig)
 
+    def _fill_kind_chips(self, kinds, ocr_on):
+        while self.sc_kinds_grid.count():
+            it = self.sc_kinds_grid.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        items = [(k, True) for k in kinds]
+        items.append(("이미지 속 정보(OCR)", ocr_on))
+        for i, (text, on) in enumerate(items):
+            self.sc_kinds_grid.addWidget(self._kind_chip(text, on), i // 2, i % 2)
+
+    def _kind_chip(self, text: str, on: bool) -> QFrame:
+        """검출 항목 칩 — on이면 크림슨 채움, off면 아웃라인."""
+        chip = QFrame()
+        h = QHBoxLayout(chip)
+        h.setContentsMargins(13, 7, 14, 7)
+        h.setSpacing(7)
+        if on:
+            chip.setStyleSheet(f"QFrame{{background:{BRAND['brand']}; border-radius:999px;}}")
+            ic = "check"; iccolor = "#FFFFFF"; tcolor = "#FFFFFF"
+        else:
+            chip.setStyleSheet("QFrame{background:#fff; border:1px solid #E7E9EE; border-radius:999px;}")
+            ic = "plus"; iccolor = "#8B92A0"; tcolor = "#565E6C"
+        icl = QLabel(); icl.setPixmap(icons.line_icon(ic, 14, iccolor, 2.6))
+        h.addWidget(icl)
+        t = QLabel(text)
+        t.setStyleSheet(f"color:{tcolor}; font-size:12.5px; font-weight:700; background:transparent;")
+        h.addWidget(t)
+        h.addStretch()
+        return chip
+
+    def _refresh_folder_count(self):
+        n = sum(1 for b, _ in self._sc_folders if b.isChecked())
+        self.sc_folder_count.setText(f"{n}곳 선택")
+
     def _add_folder_row(self, path: str, on: bool):
-        b = QPushButton(f"   {path}")
+        b = QPushButton()
         b.setObjectName("ChkCardG")
         b.setCheckable(True)
         b.setChecked(on)
-        b.setIcon(QIcon(icons.line_icon("folder", 16, "#565E6C")))
-        b.setIconSize(QSize(16, 16))
+        b.setCursor(Qt.PointingHandCursor)
+        b.setMinimumHeight(46)
         b.setStyleSheet(
-            "QPushButton{background:#fff;border:1px solid #E7E9EE;border-radius:10px;"
-            "padding:10px 12px;text-align:left;color:#14161C;font-family:'JetBrains Mono',monospace;font-size:12px;}"
-            "QPushButton:checked{border:1px solid #F6D2DE;background:#FCEFF3;}")
+            "QPushButton#ChkCardG{background:#fff;border:1px solid #E7E9EE;border-radius:10px;"
+            "padding:0;text-align:left;}"
+            "QPushButton#ChkCardG:hover{border-color:#D6DAE2;}"
+            f"QPushButton#ChkCardG:checked{{border:1px solid {BRAND['brand']};background:{BRAND['pink50']};}}")
+        h = QHBoxLayout(b); h.setContentsMargins(13, 9, 13, 9); h.setSpacing(11)
+        chk = QLabel(); chk.setFixedSize(20, 20); chk.setPixmap(_checkbox_pixmap(on))
+        h.addWidget(chk)
+        fic = QLabel(); fic.setPixmap(icons.line_icon("folder", 16, "#565E6C", 2))
+        fic.setFixedSize(16, 16)
+        h.addWidget(fic)
+        pl = QLabel(path)
+        pl.setStyleSheet("color:#14161C; font-family:'JetBrains Mono','D2Coding',monospace;"
+                         "font-size:12px; background:transparent;")
+        h.addWidget(pl); h.addStretch()
+        b.toggled.connect(lambda c, cb=chk: (cb.setPixmap(_checkbox_pixmap(c)),
+                                             self._refresh_folder_count()))
         self.sc_folder_box.addWidget(b)
         self._sc_folders.append((b, path))
 
@@ -1847,7 +2105,7 @@ class MainWindow(QMainWindow):
             hd.addWidget(chip)
             hd.addWidget(QLabel(f"{len(r.findings)}건"))
             hd.addStretch()
-            hd.addWidget(self._icon_btn("lock", "전체 격리", lambda _=False, p=path: self._do_action("quarantine", p, [])))
+            hd.addWidget(self._icon_btn("lock", "전체 격리", lambda _=False, p=path, fs=list(r.findings): self._do_action("quarantine", p, fs)))
             hd.addWidget(self._icon_btn("trash", "삭제", lambda _=False, p=path, fs=list(r.findings): self._do_action("delete", p, fs)))
             cv.addLayout(hd)
             pl = QLabel(str(path)); pl.setStyleSheet("color:#8B92A0; font-size:11px;")
@@ -1865,7 +2123,7 @@ class MainWindow(QMainWindow):
                 c2 = QLabel(); self._style_sev_label(c2, f.severity.value)
                 roww.addWidget(c2)
                 roww.addWidget(self._icon_btn("eyeOff", "마스킹", lambda _=False, p=path, fs=list(r.findings): self._do_action("mask", p, fs)))
-                roww.addWidget(self._icon_btn("lock", "격리", lambda _=False, p=path: self._do_action("quarantine", p, [])))
+                roww.addWidget(self._icon_btn("lock", "격리", lambda _=False, p=path, fs=list(r.findings): self._do_action("quarantine", p, fs)))
                 cv.addLayout(roww)
             self.group_box.addWidget(card)
         self.group_box.addStretch()
@@ -1896,25 +2154,36 @@ class MainWindow(QMainWindow):
                 ab = QHBoxLayout()
                 ab.addStretch()
                 ab.addWidget(self._icon_btn("eyeOff", "마스킹", lambda _=False, p=path, fs=list(r.findings): self._do_action("mask", p, fs)))
-                ab.addWidget(self._icon_btn("lock", "격리", lambda _=False, p=path: self._do_action("quarantine", p, [])))
+                ab.addWidget(self._icon_btn("lock", "격리", lambda _=False, p=path, fs=list(r.findings): self._do_action("quarantine", p, fs)))
                 ab.addWidget(self._icon_btn("trash", "삭제", lambda _=False, p=path, fs=list(r.findings): self._do_action("delete", p, fs)))
                 cv.addLayout(ab)
                 self._cards_col_box.get(f.severity.value, self._cards_col_box["낮음"]).addWidget(card)
 
     def _do_action(self, action: str, path: Path, findings: list):
         from . import actions as A
+
+        def _qmeta():
+            """findings 중 가장 위험한 항목의 유형·심각도(격리 메타 표시용)."""
+            if not findings:
+                return None, None
+            order = {"높음": 3, "중간": 2, "낮음": 1}
+            top = max(findings, key=lambda f: order.get(f.severity.value, 0))
+            return top.info_type, top.severity.value
+
         if action == "mask":
             r = A.mask_in_text_file(path, findings)
             ok = r.status == "success"
         elif action == "quarantine":
-            ok = A.quarantine_file(path).status == "success"
+            it, sv = _qmeta()
+            ok = A.quarantine_file(path, it, sv).status == "success"
         else:  # delete
             kind = findings[0].info_type if findings else ""
             dlg = DeleteConfirmDialog(self, [(path.name, kind)])
             if dlg.exec() != QDialog.Accepted:
                 return
             if dlg.choice == "quarantine":
-                ok = A.quarantine_file(path).status == "success"
+                it, sv = _qmeta()
+                ok = A.quarantine_file(path, it, sv).status == "success"
                 if ok:
                     self._action_counts["quarantine"] += 1
                 self._render_recent()

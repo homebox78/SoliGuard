@@ -101,8 +101,11 @@ def mask_in_text_file(
 # ---------------------------------------------------------------------------
 # 2) 격리: AES-256-GCM 암호화 후 격리 폴더로 이동(복원 가능)
 # ---------------------------------------------------------------------------
-def quarantine_file(path: Path) -> ActionResult:
+def quarantine_file(path: Path, info_type: str | None = None,
+                    severity: str | None = None) -> ActionResult:
     """원본을 암호화 후 격리함으로 이동. 메타데이터로 복원 정보 보관.
+
+    info_type/severity 가 주어지면 격리함 화면(정본 14) 표시용으로 함께 저장한다.
 
     주의: 데모에서는 복호화 키를 메타(.meta.json)에 함께 저장한다.
     실제 제품에서는 키를 OS 보안 저장소(Windows DPAPI 등)에 분리 저장해야
@@ -132,6 +135,8 @@ def quarantine_file(path: Path) -> ActionResult:
             "original_path": str(path),
             "quarantined_at": datetime.now().isoformat(timespec="seconds"),
             "size": len(data),
+            "info_type": info_type or "",
+            "severity": severity or "",
             "key": key.hex(),  # TODO(보안): OS 보안 저장소로 분리
         }
         (QUARANTINE_DIR / f"{qid}.meta.json").write_text(
