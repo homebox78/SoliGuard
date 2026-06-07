@@ -64,9 +64,9 @@ def _card(shadow: bool = True) -> QFrame:
     f.setObjectName("Card")
     if shadow:
         eff = QGraphicsDropShadowEffect(f)
-        eff.setBlurRadius(20)
-        eff.setOffset(0, 3)
-        eff.setColor(QColor(16, 18, 24, 16))
+        eff.setBlurRadius(24)
+        eff.setOffset(0, 4)
+        eff.setColor(QColor(16, 18, 24, 30))  # 흰 배경에서도 카드가 또렷이 뜨게
         f.setGraphicsEffect(eff)
     return f
 
@@ -1822,7 +1822,7 @@ class MainWindow(QMainWindow):
 
     def _quarantine_card(self, meta: dict) -> QFrame:
         from pathlib import Path as _P
-        card = QFrame(); card.setObjectName("Card")
+        card = _card()
         h = QHBoxLayout(card)
         h.setContentsMargins(16, 13, 16, 13)
         h.setSpacing(13)
@@ -1935,13 +1935,15 @@ class MainWindow(QMainWindow):
             b = QPushButton(label); b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
             b.clicked.connect(lambda _=False, k=key: self._set_hist_filter(k))
+            b.setMinimumHeight(36)
             self._hist_seg[key] = b
-            head.addWidget(b, alignment=Qt.AlignTop)
+            head.addWidget(b, alignment=Qt.AlignVCenter)
         exp = QPushButton("  내보내기"); exp.setObjectName("Ghost")
+        exp.setMinimumHeight(36)
         exp.setIcon(QIcon(icons.line_icon("fileText", 15, "#565E6C")))
         exp.setCursor(Qt.PointingHandCursor)
         exp.clicked.connect(self._export_audit)
-        head.addWidget(exp, alignment=Qt.AlignTop)
+        head.addWidget(exp, alignment=Qt.AlignVCenter)
         lay.addLayout(head)
         lay.addSpacing(6)
 
@@ -1990,7 +1992,7 @@ class MainWindow(QMainWindow):
 
     def _history_card(self, e: dict, icn: str, title: str, kind: str) -> QFrame:
         from pathlib import Path as _P
-        card = QFrame(); card.setObjectName("Card")
+        card = _card()
         h = QHBoxLayout(card); h.setContentsMargins(16, 12, 16, 12); h.setSpacing(13)
         box = QLabel(); box.setFixedSize(40, 40); box.setAlignment(Qt.AlignCenter)
         tone = {"scan": (BRAND["pink50"], BRAND["brand"]),
