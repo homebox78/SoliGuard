@@ -1548,8 +1548,10 @@ class MainWindow(QMainWindow):
 
         # 마스킹 미리보기 — 목록 위쪽 가로형 패널(행 선택 시 표시).
         # 우측 고정 패널을 없애 목록이 전체 폭을 쓰도록 한다.
+        from PySide6.QtWidgets import QSizePolicy
         self.preview = _card()
         self.preview.setVisible(False)
+        self.preview.setFixedHeight(124)  # 세 블록 높이 균형용 고정 높이
         pv = QHBoxLayout(self.preview)
         pv.setContentsMargins(16, 12, 16, 14)
         pv.setSpacing(16)
@@ -1559,36 +1561,36 @@ class MainWindow(QMainWindow):
         self.pv_file = QLabel(""); self.pv_file.setWordWrap(True)
         self.pv_file.setStyleSheet("font-weight:700; font-size:13.5px;")
         info.addWidget(self.pv_file)
-        self.pv_path = QLabel(""); self.pv_path.setWordWrap(True)
+        self.pv_path = QLabel("")  # 긴 경로는 한 줄 가운데 말줄임(_show_preview에서 처리)
         self.pv_path.setStyleSheet("color:#8B92A0; font-size:11.5px;")
         info.addWidget(self.pv_path)
         self.pv_type = QLabel("")
         info.addWidget(self.pv_type)
         info.addStretch()
-        pv.addWidget(infow, 0, Qt.AlignTop)
+        pv.addWidget(infow)
         self.pv_value = QLabel("")
         self.pv_value.setFixedWidth(200)
-        self.pv_value.setMinimumHeight(72)
+        self.pv_value.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.pv_value.setAlignment(Qt.AlignCenter)
         self.pv_value.setWordWrap(True)
         self.pv_value.setStyleSheet(
             "font-family:'JetBrains Mono','D2Coding',monospace; font-size:15px;"
-            " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:14px 12px;")
-        pv.addWidget(self.pv_value, 0, Qt.AlignTop)
+            " background:#F7F8FA; border:1px solid #E7E9EE; border-radius:10px; padding:8px 12px;")
+        pv.addWidget(self.pv_value)
         ctxw = QWidget()
         cvb = QVBoxLayout(ctxw); cvb.setContentsMargins(0, 0, 0, 0); cvb.setSpacing(6)
         ctxlbl = QLabel("검출 위치 (마스킹됨)")
         ctxlbl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
         cvb.addWidget(ctxlbl)
         self.pv_ctx = QLabel(""); self.pv_ctx.setWordWrap(True)
-        self.pv_ctx.setMinimumHeight(72)
         self.pv_ctx.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.pv_ctx.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.pv_ctx.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.pv_ctx.setStyleSheet(
             "font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#CBD3E1;"
-            " background:#1B1E25; border-radius:10px; padding:12px; line-height:1.4;")
+            " background:#1B1E25; border-radius:10px; padding:10px 12px; line-height:1.4;")
         cvb.addWidget(self.pv_ctx, 1)
-        pv.addWidget(ctxw, 1, Qt.AlignTop)
+        pv.addWidget(ctxw, 1)
         outer.addWidget(self.preview)
 
         # 행 리스트 카드(전체 폭 사용)
@@ -3032,7 +3034,12 @@ class MainWindow(QMainWindow):
     def _show_preview(self, path, f):
         self.preview.setVisible(True)
         self.pv_file.setText(path.name)
-        self.pv_path.setText(f"{path}  ·  line {f.line}")
+        # 긴 경로는 한 줄 가운데 말줄임(전체 경로는 툴팁으로)
+        from PySide6.QtGui import QFontMetrics
+        fm = QFontMetrics(self.pv_path.font())
+        full = f"{path}  ·  line {f.line}"
+        self.pv_path.setText(fm.elidedText(full, Qt.ElideMiddle, 292))
+        self.pv_path.setToolTip(str(path))
         color, bg, line = SEV_CHIP.get(f.severity.value, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
         self.pv_type.setText(
             f'{f.info_type}　<span style="color:{color};font-weight:700;">● {f.severity.value}</span>')
