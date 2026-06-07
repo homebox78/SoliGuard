@@ -593,6 +593,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
         self.stack.setCurrentWidget(self.dashboard)
         self._set_hero("donut")
+        self._refresh_dashboard()
 
     # -------------------------------------------------------- 사이드바
     def _build_sidebar(self) -> QWidget:
@@ -951,6 +952,90 @@ class MainWindow(QMainWindow):
             tag.setStyleSheet("color:#8B92A0; font-size:11px;")
             h.addWidget(tag, alignment=Qt.AlignTop)
         return row
+
+    def _next_scan_text(self) -> str:
+        """스케줄에서 다음 자동 점검 시각 텍스트(정본: 6/9(월) 09:00)."""
+        sch = getattr(self.cfg, "schedule", None) if self.cfg else None
+        if not sch or not getattr(sch, "enabled", False):
+            return "사용 안 함"
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        h, m = getattr(sch, "hour", 9), getattr(sch, "minute", 0)
+        wd_ko = "월화수목금토일"
+        freq = getattr(sch, "frequency", "weekly")
+        if freq == "daily":
+            nxt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            if nxt <= now:
+                nxt += timedelta(days=1)
+        elif freq == "monthly":
+            dom = getattr(sch, "day_of_month", 1)
+            month, year = now.month, now.year
+            try:
+                nxt = now.replace(day=dom, hour=h, minute=m, second=0, microsecond=0)
+            except ValueError:
+                nxt = now
+            if nxt <= now:
+                month = month % 12 + 1
+                year += 1 if month == 1 else 0
+                nxt = nxt.replace(year=year, month=month)
+        else:  # weekly
+            target = {"mon": 0, "tue": 1, "wed": 2, "thu": 3,
+                      "fri": 4, "sat": 5, "sun": 6}.get(getattr(sch, "day_of_week", "mon"), 0)
+            days = (target - now.weekday()) % 7
+            nxt = (now + timedelta(days=days)).replace(hour=h, minute=m, second=0, microsecond=0)
+            if nxt <= now:
+                nxt += timedelta(days=7)
+        return f"{nxt.month}/{nxt.day}({wd_ko[nxt.weekday()]}) {h:02d}:{m:02d}"
+
+    def _refresh_dashboard(self):
+        """config.last_scan + 스케줄 + 격리 수로 대시보드를 채운다(시작 시/점검 후)."""
+        if not hasattr(self, "dash_sub"):
+            return
+        self.stat_role._value_label.setText(", ".join(self.profiles))
+        self.stat_next._value_label.setText(self._next_scan_text())
+        try:
+            from . import actions
+            qn = (len(list(actions.QUARANTINE_DIR.glob("*.meta.json")))
+                  if actions.QUARANTINE_DIR.exists() else 0)
+        except Exception:
+            qn = 0
+        self.stat_quar._value_label.setText(f"{qn}개")
+
+        ls = (getattr(self.cfg, "last_scan", None) or {}) if self.cfg else {}
+        if not ls:
+            return  # 점검 전 빈 상태 유지
+        scanned = ls.get("scanned", 0)
+        total = ls.get("total", 0)
+        skipped = ls.get("skipped", 0)
+        bysev = ls.get("bysev", {}) or {}
+        grade = ls.get("grade", "안전")
+        prev = ls.get("prev_total")
+        self.dash_sub.setText(
+            f"마지막 점검 {self._rel_time(ls.get('at',''))} · {scanned:,}개 파일 검사")
+        for hw in (self.donut, self.shield_hero, self.numeric_hero):
+            hw.set_data(bysev, grade)
+        if total == 0 and skipped > 0:
+            self.grade_chip_label.setText("확인 필요")
+            self._style_sev_label(self.grade_chip_label, "중간")
+            self.grade_label.setText(
+                f"위험은 발견되지 않았지만 {skipped}개 파일을 검사하지 못했습니다(파서/OCR 미설치 등).")
+        else:
+            self._style_sev_label(
+                self.grade_chip_label,
+                {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(grade, "낮음"))
+            self.grade_chip_label.setText(f"● {grade}")  # 칩은 등급(위험/주의/안전) 표기
+            if total:
+                self.grade_label.setText(
+                    f"주의가 필요한 항목 {total}건을 발견했어요. "
+                    + {"위험": "즉시 조치가 필요해요.", "주의": "주의가 필요해요."}.get(grade, ""))
+            else:
+                self.grade_label.setText("점검한 파일에서 위험을 찾지 못했습니다. 안전합니다.")
+        if prev is not None and prev != total:
+            self.dash_prev.setText(f"지난 점검 {prev}건 → {total}건")
+            self.dash_prev.setVisible(True)
+        else:
+            self.dash_prev.setVisible(False)
+        self._prev_total = total
 
     # -------------------------------------------------------- 스캔 진행
     def _build_scanning(self) -> QWidget:
@@ -2371,38 +2456,20 @@ class MainWindow(QMainWindow):
         for r in summary.file_results:
             for f in r.findings:
                 bysev[f.severity.value] = bysev.get(f.severity.value, 0) + 1
-        # 대시보드 갱신(3종 히어로)
-        for hw in (self.donut, self.shield_hero, self.numeric_hero):
-            hw.set_data(bysev, grade)
-        # 지난 점검 대비 변화
-        if self._prev_total is not None and total < self._prev_total:
-            self.dash_prev.setText(f"▼ 지난 점검 {self._prev_total}건 → {total}건")
-            self.dash_prev.setVisible(True)
-        else:
-            self.dash_prev.setVisible(False)
-        self._prev_total = total
-        sev_for_chip = {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(grade, "낮음")
-        if total == 0 and skipped > 0:
-            self.grade_chip_label.setText("확인 필요")
-            self._style_sev_label(self.grade_chip_label, "중간")
-            self.grade_label.setText(
-                f"위험은 발견되지 않았지만 {skipped}개 파일을 검사하지 못했습니다(파서/OCR 미설치 등).")
-        else:
-            self._style_sev_label(self.grade_chip_label, sev_for_chip)
-            if total:
-                self.grade_label.setText(
-                    f"주의가 필요한 항목 {total}건을 발견했어요. "
-                    + {"위험": "즉시 조치가 필요해요.", "주의": "주의가 필요해요."}.get(grade, ""))
-            else:
-                self.grade_label.setText("점검한 파일에서 위험을 찾지 못했습니다. 안전합니다.")
-        self.dash_sub.setText(f"마지막 점검 방금 · {summary.scanned:,}개 파일 검사 · 검사불가 {skipped}")
-        self.stat_role._value_label.setText(", ".join(self.profiles))
-        try:
-            from . import actions
-            qn = len(list(actions.QUARANTINE_DIR.glob("*.meta.json"))) if actions.QUARANTINE_DIR.exists() else 0
-            self.stat_quar._value_label.setText(f"{qn}개")
-        except Exception:
-            pass
+        # 마지막 점검 요약을 영속화(대시보드 표시용)
+        from datetime import datetime
+        prev_total = (self.cfg.last_scan or {}).get("total") if self.cfg else None
+        if self.cfg is not None:
+            self.cfg.last_scan = {
+                "at": datetime.now().isoformat(timespec="seconds"),
+                "scanned": summary.scanned, "total": total, "skipped": skipped,
+                "bysev": bysev, "grade": grade, "prev_total": prev_total}
+            self.cfg.last_grade = {"위험": "danger", "주의": "warn", "안전": "safe"}.get(grade, "safe")
+            try:
+                self.cfg.save()
+            except Exception:
+                pass
+        self._refresh_dashboard()
 
         self.result_title.setText(
             f"점검 결과 — 위험 {summary.total_findings}건 발견")

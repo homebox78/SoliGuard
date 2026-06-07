@@ -49,6 +49,8 @@ class AppConfig:
     auto_action: str = "report_only"   # "report_only" | "quarantine"
     last_grade: str = "safe"           # 트레이 아이콘 색용 캐시
     whitelist: list[str] = field(default_factory=list)  # 사용자 지정 오탐(제외) 값
+    # 마지막 점검 요약(대시보드 표시용): {at, scanned, total, bysev, prev_total}
+    last_scan: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls) -> "AppConfig":
