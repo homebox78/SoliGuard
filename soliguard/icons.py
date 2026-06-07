@@ -53,6 +53,8 @@ ICON_PATHS = {
     "download": ["M12 3v12", "m7 11 5 5 5-5", "M5 20h14"],
     "plus": ["M12 5v14", "M5 12h14"],
     "hardDrive": ["M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z", "M7 9h6", "M7 13h10", "M16 9h.01"],
+    "pause": ["M7 5h3v14H7z", "M14 5h3v14h-3z"],
+    "stop": ["M7 7h10v10H7z"],
 }
 
 ROLE_ICON = {"개발자": "code", "디자이너": "image", "기획자": "fileText",

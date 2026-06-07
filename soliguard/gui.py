@@ -1108,13 +1108,13 @@ class MainWindow(QMainWindow):
         btnrow = QHBoxLayout(); btnrow.addStretch()
         self.pause_btn = QPushButton("  일시정지")
         self.pause_btn.setObjectName("Ghost")
-        self.pause_btn.setIcon(QIcon(icons.line_icon("clock", 15, "#565E6C")))
+        self.pause_btn.setIcon(QIcon(icons.line_icon("pause", 15, "#565E6C")))
         self.pause_btn.setCursor(Qt.PointingHandCursor)
         self.pause_btn.clicked.connect(self._toggle_pause)
         btnrow.addWidget(self.pause_btn)
         cancel = QPushButton("  중지하고 결과 보기")
         cancel.setObjectName("Ghost")
-        cancel.setIcon(QIcon(icons.line_icon("check", 15, "#565E6C")))
+        cancel.setIcon(QIcon(icons.line_icon("stop", 15, "#565E6C")))
         cancel.clicked.connect(self._cancel_scan)
         btnrow.addWidget(cancel)
         btnrow.addStretch()
@@ -1133,11 +1133,13 @@ class MainWindow(QMainWindow):
         for icn, name in [("folder", "파일 수집"), ("search", "내용 검사"), ("cpu", "검증·분석")]:
             fr = QFrame()
             fr.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
-            h = QHBoxLayout(fr); h.setContentsMargins(12, 10, 12, 10); h.setSpacing(8)
-            il = QLabel(); il.setPixmap(icons.line_icon(icn, 16, "#8B92A0"))
-            tl = QLabel(name); tl.setStyleSheet("font-weight:700; color:#8B92A0;")
-            h.addWidget(il); h.addWidget(tl); h.addStretch()
-            self._stage_labels.append((fr, il, tl, icn))
+            h = QHBoxLayout(fr); h.setContentsMargins(12, 10, 12, 10); h.setSpacing(9)
+            box = QLabel(); box.setFixedSize(26, 26); box.setAlignment(Qt.AlignCenter)
+            box.setStyleSheet("background:#E7E9EE; border-radius:7px;")
+            box.setPixmap(icons.line_icon(icn, 15, "#8B92A0"))
+            tl = QLabel(name); tl.setStyleSheet("font-weight:700; color:#8B92A0; font-size:13px;")
+            h.addWidget(box); h.addWidget(tl); h.addStretch()
+            self._stage_labels.append((fr, box, tl, icn))
             stage_row.addWidget(fr, 1)
         cl.addLayout(stage_row)
         pr = QHBoxLayout()
@@ -1171,29 +1173,32 @@ class MainWindow(QMainWindow):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(26, 20, 26, 20)
         cl.setSpacing(10)
-        top = QHBoxLayout()
+        top = QHBoxLayout(); top.setAlignment(Qt.AlignBottom)
         self.min_pct = QLabel("0%")
-        self.min_pct.setStyleSheet("font-size:46px; font-weight:800; color:#14161C;")
-        top.addWidget(self.min_pct); top.addStretch()
+        self.min_pct.setStyleSheet("font-size:82px; font-weight:800; color:#14161C;"
+                                   "font-family:'JetBrains Mono','D2Coding',monospace; letter-spacing:-2px;")
+        top.addWidget(self.min_pct, 0, Qt.AlignBottom); top.addStretch()
         fcol = QVBoxLayout(); fcol.setSpacing(0)
         self.min_found = QLabel("발견 0건")
-        self.min_found.setStyleSheet("font-size:14px; font-weight:800; color:#B0123F;")
+        self.min_found.setStyleSheet("font-size:15px; font-weight:800; color:#B0123F;")
         self.min_found.setAlignment(Qt.AlignRight)
         fcol.addWidget(self.min_found)
-        fl = QLabel("실시간 검출"); fl.setStyleSheet("color:#8B92A0; font-size:11px;")
+        fl = QLabel("실시간 검출"); fl.setStyleSheet("color:#8B92A0; font-size:12px;")
         fl.setAlignment(Qt.AlignRight)
         fcol.addWidget(fl)
         top.addLayout(fcol)
         cl.addLayout(top)
         self.min_bar = QProgressBar()
-        self.min_bar.setTextVisible(False); self.min_bar.setFixedHeight(8)
+        self.min_bar.setTextVisible(False); self.min_bar.setFixedHeight(4)
         cl.addWidget(self.min_bar)
+        cl.addSpacing(6)
         self.min_log = QLabel("")
+        self.min_log.setTextFormat(Qt.RichText)
         self.min_log.setStyleSheet(
-            "background:#14161C; color:#CBD3E1; border-radius:12px; padding:16px 18px;"
-            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:12px; line-height:1.6;")
-        self.min_log.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.min_log.setMinimumHeight(150)
+            "background:#14161C; border-radius:12px; padding:16px 18px;"
+            "font-family:'JetBrains Mono','D2Coding',monospace; font-size:12.5px;")
+        self.min_log.setAlignment(Qt.AlignBottom | Qt.AlignLeft)
+        self.min_log.setMinimumHeight(180)
         cl.addWidget(self.min_log, 1)
         return card
 
@@ -1214,7 +1219,7 @@ class MainWindow(QMainWindow):
         paused = self.worker.toggle_pause()
         self.pause_btn.setText("  재개" if paused else "  일시정지")
         self.pause_btn.setIcon(QIcon(icons.line_icon(
-            "refresh" if paused else "clock", 15, "#565E6C")))
+            "search" if paused else "pause", 15, "#565E6C")))
 
     # -------------------------------------------------------- 결과(3분할)
     def _build_results(self) -> QWidget:
@@ -2377,7 +2382,7 @@ class MainWindow(QMainWindow):
         self.scan_ring.set(0, 0, "준비 중")
         self.radial_path.setText("준비 중...")
         self.pause_btn.setText("  일시정지")
-        self.pause_btn.setIcon(QIcon(icons.line_icon("clock", 15, "#565E6C")))
+        self.pause_btn.setIcon(QIcon(icons.line_icon("pause", 15, "#565E6C")))
         for v in self._bucket_labels.values():
             v.setText("0"); v.setStyleSheet("font-size:26px; font-weight:800; color:#8B92A0;")
         ocr_enabled = self.ocr_check.isChecked() if hasattr(self, "ocr_check") else True
@@ -2404,16 +2409,21 @@ class MainWindow(QMainWindow):
         self.progress_path.setText(f"검사 중  {path}")
         self.scan_sub.setText(
             f"{stage_name} · 검사 {done:,} / {total:,}개 · 예상 남은 시간 약 {eta}초")
-        for i, (fr, il, tl, icn) in enumerate(self._stage_labels):
-            if i < stage:
-                c, bg, bd = "#15A34A", "#FFFFFF", "#E7E9EE"
-            elif i == stage:
-                c, bg, bd = "#B0123F", "#FCEFF3", "#F6D2DE"
-            else:
-                c, bg, bd = "#8B92A0", "#F7F8FA", "#E7E9EE"
+        for i, (fr, box, tl, icn) in enumerate(self._stage_labels):
+            if i < stage:        # 완료
+                txt, bg, bd = "#14161C", "#FFFFFF", "#E7E9EE"
+                box.setStyleSheet("background:#15A34A; border-radius:7px;")
+                box.setPixmap(icons.line_icon("check", 15, "#FFFFFF", 3))
+            elif i == stage:     # 진행
+                txt, bg, bd = "#B0123F", "#FCEFF3", "#F6D2DE"
+                box.setStyleSheet("background:#B0123F; border-radius:7px;")
+                box.setPixmap(icons.line_icon(icn, 15, "#FFFFFF"))
+            else:                # 대기
+                txt, bg, bd = "#8B92A0", "#F7F8FA", "#E7E9EE"
+                box.setStyleSheet("background:#E7E9EE; border-radius:7px;")
+                box.setPixmap(icons.line_icon(icn, 15, "#8B92A0"))
             fr.setStyleSheet(f"QFrame{{background:{bg};border:1px solid {bd};border-radius:10px;}}")
-            il.setPixmap(icons.line_icon(icn, 16, c))
-            tl.setStyleSheet(f"font-weight:700; color:{c};")
+            tl.setStyleSheet(f"font-weight:700; font-size:13px; color:{txt};")
         # 원형
         self.scan_ring.set(pct, found, stage_name)
         self.radial_path.setText(str(path))
@@ -2424,7 +2434,14 @@ class MainWindow(QMainWindow):
         from pathlib import Path as _P
         self._scan_log.append(_P(path).name)
         self._scan_log = self._scan_log[-8:]
-        self.min_log.setText("\n".join(f"✓ scanned   {n}" for n in self._scan_log))
+        rows_html = []
+        for j, n in enumerate(self._scan_log):
+            last = j == len(self._scan_log) - 1
+            col = "#FFC9D8" if last else "rgba(255,255,255,0.4)"
+            rows_html.append(
+                f'<div style="color:{col};padding:2px 0;">'
+                f'<span style="color:#15A34A;">✓</span> scanned&nbsp;&nbsp;{n}</div>')
+        self.min_log.setText("".join(rows_html))
         # 버킷(공유)
         for key, v in self._bucket_labels.items():
             n = buckets.get(key, 0)
