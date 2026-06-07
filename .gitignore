@@ -36,3 +36,8 @@ Thumbs.db
 # 마스킹 산출물(테스트 부산물)
 examples/*_masked*.py
 *_masked.py
+examples/*_masked.*
+*_masked.hwpx
+*_masked.docx
+*_masked.csv
+*_masked.txt
