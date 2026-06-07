@@ -74,15 +74,11 @@ soliguard/                  # 메인 패키지
   cli.py / __main__.py      #   CLI 진입점(전체 파이프라인, --report 로 PDF 발급) (soliguard)
   ui/settings_figma.py      #   Figma 옵트인 설정 섹션(동의+토큰 이중 가드)
   docs/                     #   설계 스펙 문서(.md) + 화면 스크린샷(참고용)
-tests/                      # unittest 115케이스 (핵심은 외부 의존성 0)
-  fixtures/                 #   PSD 픽스처 생성 스크립트
-examples/                   # 데모용 더미 데이터(.py/.csv/.xlsx/.hwpx/.pdf/.txt)
 assets/                     # 앱 아이콘·번들 폰트·브랜드 로고·QSS용 SVG
 pyproject.toml              # 패키지 메타·optional 의존성·콘솔 스크립트
 requirements.txt            # 포맷 확장(선택) 의존성
 build_exe.spec              # PyInstaller(GUI exe + 에이전트 exe)
 installer.iss               # Inno Setup 설치 스크립트(작업 스케줄러 등록 포함)
-.github/workflows/          # CI(unittest + compileall)
 ```
 
 정규식(1차)·검증 함수(2차)·구조 컨텍스트(엔진)를 독립 계층으로 분리해, 추후 **문맥 기반 AI
@@ -125,14 +121,11 @@ ISCC installer.iss                     # SoliGuard_Setup.exe (Inno Setup)
 포맷 확장(xls/pdf/docx/OCR/PSD)은 `pip install -r requirements.txt` 로 선택 활성화.
 
 ```powershell
-# 전체 테스트 (115케이스)
-py -m unittest discover -s tests -t .
-
 # GUI 실행(PySide6 필요)
 py -m soliguard.app
 
-# 데모 스캔(examples: csv/xlsx/hwpx/pdf/txt 혼재)
-py -m soliguard.cli examples --role developer
+# 폴더 스캔(CLI, --report 로 PDF 진단서 발급)
+py -m soliguard.cli C:\스캔할폴더 --role developer
 py -m soliguard.cli C:\스캔할폴더 --role planner --no-ocr
 ```
 

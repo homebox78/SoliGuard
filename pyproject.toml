@@ -24,7 +24,6 @@ quarantine = ["cryptography>=42.0"]
 gui = ["PySide6>=6.6"]
 schedule = ["APScheduler>=3.10", "platformdirs>=4.0", "plyer>=2.1"]
 figma = ["requests>=2.31"]
-dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 build = ["pyinstaller>=6.5"]
 all = [
     "openpyxl>=3.1", "xlrd>=2.0", "python-docx>=1.1", "pdfplumber>=0.11",
@@ -42,25 +41,3 @@ soliguard-agent = "soliguard.scheduler:run_agent" # 백그라운드 에이전트
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["soliguard*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-v --tb=short"
-markers = [
-    "ocr: OCR(Tesseract) 필요",
-    "psd: PSD(psd-tools) 필요",
-    "network: 네트워크 모킹",
-]
-
-[tool.coverage.run]
-source = ["soliguard"]
-branch = true
-omit = ["*/gui.py", "*/app.py", "*/ui/*", "*/onboarding.py", "tests/*"]
-
-[tool.coverage.report]
-show_missing = true
-exclude_lines = [
-    "pragma: no cover",
-    "if __name__ == .__main__.:",
-    "raise NotImplementedError",
-]
