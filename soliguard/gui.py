@@ -351,6 +351,82 @@ class RolePopover(QDialog):
         self.accept()
 
 
+class DeleteConfirmDialog(QDialog):
+    """완전삭제 확인 모달(시안 11). choice: 'delete' | 'quarantine' | None."""
+
+    def __init__(self, parent, items):
+        super().__init__(parent)
+        self.setWindowTitle("완전삭제 확인")
+        self.setModal(True)
+        self.setMinimumWidth(460)
+        self.choice = None
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(24, 20, 24, 18)
+        lay.setSpacing(12)
+
+        hd = QHBoxLayout()
+        ic = QLabel()
+        ic.setFixedSize(40, 40)
+        ic.setAlignment(Qt.AlignCenter)
+        ic.setStyleSheet("background:#FDEAEA; border-radius:10px;")
+        ic.setPixmap(icons.line_icon("trash", 20, "#E11D2A"))
+        hd.addWidget(ic)
+        tc = QVBoxLayout(); tc.setSpacing(1)
+        t = QLabel("완전삭제 확인"); t.setStyleSheet("font-size:16px; font-weight:800;")
+        tc.addWidget(t)
+        s = QLabel("이 작업은 되돌릴 수 없습니다"); s.setStyleSheet("color:#565E6C; font-size:12px;")
+        tc.addWidget(s)
+        hd.addLayout(tc); hd.addStretch()
+        lay.addLayout(hd)
+
+        desc = QLabel(f"선택한 {len(items)}건을 복구 불가능하게 영구 삭제합니다(덮어쓰기 삭제).")
+        desc.setWordWrap(True); desc.setStyleSheet("font-size:13px;")
+        lay.addWidget(desc)
+
+        for name, kind in items[:6]:
+            row = QFrame()
+            row.setStyleSheet("QFrame{background:#F7F8FA;border:1px solid #E7E9EE;border-radius:10px;}")
+            rl = QHBoxLayout(row); rl.setContentsMargins(12, 9, 12, 9)
+            fi = QLabel(); fi.setPixmap(icons.line_icon("fileText", 15, "#565E6C"))
+            rl.addWidget(fi)
+            nm = QLabel(name); nm.setStyleSheet("font-size:12.5px;")
+            rl.addWidget(nm); rl.addStretch()
+            kl = QLabel(kind); kl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+            rl.addWidget(kl)
+            lay.addWidget(row)
+
+        warn = QLabel("권장 — 먼저 [격리]로 보관 후 검토하세요. 격리본은 언제든 복원할 수 있습니다.")
+        warn.setWordWrap(True)
+        warn.setStyleSheet("background:#FCEFF3; border:1px solid #F6D2DE; border-radius:10px;"
+                           "color:#8A1538; padding:11px 13px; font-size:12px;")
+        lay.addWidget(warn)
+
+        lay.addWidget(QLabel("확인을 위해 '삭제'를 입력하세요"))
+        self.field = QLineEdit()
+        self.field.setPlaceholderText("삭제")
+        self.field.textChanged.connect(self._check)
+        lay.addWidget(self.field)
+
+        foot = QHBoxLayout()
+        cancel = QPushButton("취소"); cancel.setObjectName("Ghost")
+        cancel.clicked.connect(self.reject)
+        foot.addWidget(cancel)
+        foot.addStretch()
+        q = QPushButton("  격리로 변경"); q.setObjectName("Ghost")
+        q.setIcon(QIcon(icons.line_icon("lock", 15, "#565E6C")))
+        q.clicked.connect(lambda: (setattr(self, "choice", "quarantine"), self.accept()))
+        foot.addWidget(q)
+        self.del_btn = QPushButton("  영구 삭제"); self.del_btn.setObjectName("Danger")
+        self.del_btn.setIcon(QIcon(icons.line_icon("trash", 15, "#FFFFFF")))
+        self.del_btn.setEnabled(False)
+        self.del_btn.clicked.connect(lambda: (setattr(self, "choice", "delete"), self.accept()))
+        foot.addWidget(self.del_btn)
+        lay.addLayout(foot)
+
+    def _check(self, text):
+        self.del_btn.setEnabled(text.strip() == "삭제")
+
+
 # ---------------------------------------------------------------- 메인 윈도우
 class MainWindow(QMainWindow):
     scan_finished = Signal(str)
@@ -1820,16 +1896,22 @@ class MainWindow(QMainWindow):
         elif action == "quarantine":
             ok = A.quarantine_file(path).status == "success"
         else:  # delete
-            text, conf = QInputDialog.getText(
-                self, "완전 삭제 확인",
-                f"{path.name} 을(를) 복구 불가능하게 삭제합니다.\n확인을 위해 '삭제'를 입력하세요:")
-            if not conf or text.strip() != "삭제":
+            kind = findings[0].info_type if findings else ""
+            dlg = DeleteConfirmDialog(self, [(path.name, kind)])
+            if dlg.exec() != QDialog.Accepted:
+                return
+            if dlg.choice == "quarantine":
+                ok = A.quarantine_file(path).status == "success"
+                if ok:
+                    self._action_counts["quarantine"] += 1
+                self._render_recent()
+                self._toast("격리했습니다." if ok else "처리하지 못했습니다.")
                 return
             ok = A.secure_delete(path, confirmed=True).status == "success"
         if ok:
             self._action_counts[action] += 1
         self._render_recent()
-        QMessageBox.information(self, "조치", "완료되었습니다." if ok else "처리하지 못했습니다.")
+        self._toast("완료되었습니다." if ok else "처리하지 못했습니다.")
 
     # -------------------------------------------------------- 필터/미리보기
     def _apply_filter(self, *_):
@@ -1897,16 +1979,20 @@ class MainWindow(QMainWindow):
         g = self._selected_by_file()
         if not self._require(g):
             return
-        text, ok = QInputDialog.getText(
-            self, "완전 삭제 확인",
-            f"선택한 {len(g)}개 파일을 복구 불가능하게 삭제합니다.\n"
-            "되돌릴 수 없습니다. 확인을 위해 '삭제'를 입력하세요:")
-        if not ok or text.strip() != "삭제":
+        items = [(p.name, (fs[0].info_type if fs else "")) for p, fs in g.items()]
+        dlg = DeleteConfirmDialog(self, items)
+        if dlg.exec() != QDialog.Accepted:
             return
-        from .actions import secure_delete
-        done = sum(1 for p in g if secure_delete(p, confirmed=True).status == "success")
-        self._action_counts["delete"] += done
-        QMessageBox.information(self, "삭제 완료", f"{done}개 파일을 영구 삭제했습니다.")
+        if dlg.choice == "quarantine":
+            from .actions import quarantine_file
+            ok = sum(1 for p in g if quarantine_file(p).status == "success")
+            self._action_counts["quarantine"] += ok
+            self._toast(f"{ok}개 파일을 격리했습니다.")
+        else:
+            from .actions import secure_delete
+            done = sum(1 for p in g if secure_delete(p, confirmed=True).status == "success")
+            self._action_counts["delete"] += done
+            self._toast(f"{done}개 파일을 영구 삭제했습니다.")
         self._render_recent()
 
     def _mark_false_positive(self):
@@ -1960,6 +2046,22 @@ class MainWindow(QMainWindow):
             self, "Figma 검사 완료",
             f"'{result.file_name}'에서 텍스트 {result.text_node_count}개 검사, "
             f"위험 {len(result.findings)}건 발견")
+
+    def _toast(self, message: str):
+        from PySide6.QtCore import QTimer
+        if getattr(self, "_toast_label", None) is None:
+            self._toast_label = QLabel(self)
+            self._toast_label.setStyleSheet(
+                "background:#1B1E25; color:#fff; border-radius:12px;"
+                "padding:12px 18px; font-size:13px; font-weight:600;")
+            self._toast_label.setAlignment(Qt.AlignCenter)
+        t = self._toast_label
+        t.setText(message)
+        t.adjustSize()
+        t.move((self.width() - t.width()) // 2, self.height() - t.height() - 28)
+        t.show()
+        t.raise_()
+        QTimer.singleShot(2400, t.hide)
 
     def closeEvent(self, event):
         if self._tray_active:
