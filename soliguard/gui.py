@@ -45,9 +45,13 @@ _HIST_META = {
 
 # 검출 유형 → 행 아이콘(결과 테이블)
 _TYPE_ICON = {
-    "주민등록번호": "user", "휴대전화번호": "phone", "전화번호": "phone",
+    "주민등록번호": "user", "외국인등록번호": "users",
+    "휴대전화번호": "phone", "전화번호": "phone",
     "이메일": "mail", "신용카드번호": "card", "계좌번호": "card",
-    "사업자등록번호": "fileText", "API 키/시크릿": "key", "AWS Access Key": "key",
+    "사업자등록번호": "fileText",
+    "여권번호": "shieldCheck", "운전면허번호": "drive",
+    "주소": "home", "IP 주소": "database",
+    "API 키/시크릿": "key", "AWS Access Key": "key",
     "DB 접속정보": "database", "개인키(PEM)": "key",
 }
 
@@ -284,11 +288,14 @@ def _style_segment(btns: dict, current: str):
 
 # ---------------------------------------------------------------- 스캔 워커
 def _bucket_of(info_type: str) -> str:
-    if info_type in ("주민등록번호", "외국인등록번호", "신분증 이미지", "실고객 샘플"):
+    # 신원 식별번호(주민/외국인/여권/운전면허) — 가장 민감한 그룹
+    if info_type in ("주민등록번호", "외국인등록번호", "여권번호", "운전면허번호",
+                     "신분증 이미지", "실고객 샘플"):
         return "주민등록번호"
     if info_type == "신용카드번호":
         return "신용카드번호"
-    if info_type in ("API 키/시크릿", "DB 접속정보", "AWS Access Key", "개인키(PEM)"):
+    if info_type in ("API 키/시크릿", "DB 접속정보", "AWS Access Key",
+                     "개인키(PEM)", "IP 주소"):
         return "API키/DB"
     if info_type in ("전화번호", "이메일"):
         return "전화·이메일"
@@ -1616,9 +1623,23 @@ class MainWindow(QMainWindow):
         fic.setPixmap(icons.line_icon(_TYPE_ICON.get(finding.info_type, "fileText"), 16, "#565E6C", 2))
         h.addWidget(fic)
         col = QVBoxLayout(); col.setSpacing(1)
+        t1row = QHBoxLayout(); t1row.setSpacing(6)
         t1 = QLabel(finding.info_type); t1.setStyleSheet("font-weight:700; font-size:12.5px;")
-        col.addWidget(t1)
-        t2 = QLabel(f"{path.name} · line {finding.line}")
+        t1row.addWidget(t1)
+        if finding.field:  # 구조화 포맷(표/JSON)에서 검출 — 출처 열 라벨
+            fld = QLabel(finding.field)
+            fld.setStyleSheet(
+                "background:#FCEFF3; color:#B0123F; border-radius:3px;"
+                "padding:0 6px; font-size:10.5px; font-weight:700;")
+            from PySide6.QtWidgets import QSizePolicy
+            fld.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            t1row.addWidget(fld)
+        t1row.addStretch()
+        col.addLayout(t1row)
+        src = f"{path.name} · line {finding.line}"
+        if finding.field:
+            src += f" · 열 “{finding.field}”"
+        t2 = QLabel(src)
         t2.setStyleSheet("color:#8B92A0; font-size:11px;")
         col.addWidget(t2)
         h.addLayout(col, 1)
@@ -2911,13 +2932,24 @@ class MainWindow(QMainWindow):
                 cv = QVBoxLayout(card)
                 cv.setContentsMargins(14, 12, 14, 12)
                 cv.setSpacing(4)
-                nm = QLabel(f"  {f.info_type}")
+                nmrow = QHBoxLayout(); nmrow.setSpacing(6)
+                nm = QLabel(f.info_type)
                 nm.setStyleSheet("font-weight:800; font-size:13px;")
-                cv.addWidget(nm)
+                nmrow.addWidget(nm)
+                if f.field:  # 표/JSON 구조에서 검출 — 출처 열 라벨
+                    fldc = QLabel(f.field)
+                    fldc.setStyleSheet(
+                        "background:#FCEFF3; color:#B0123F; border-radius:3px;"
+                        "padding:0 6px; font-size:10.5px; font-weight:700;")
+                    from PySide6.QtWidgets import QSizePolicy
+                    fldc.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+                    nmrow.addWidget(fldc)
+                nmrow.addStretch()
+                cv.addLayout(nmrow)
                 mv = QLabel(f.masked)
                 mv.setStyleSheet("font-family:'JetBrains Mono',monospace; font-size:13px;")
                 cv.addWidget(mv)
-                fnm = QLabel(path.name)
+                fnm = QLabel(path.name + (f" · 열 “{f.field}”" if f.field else ""))
                 fnm.setStyleSheet("color:#8B92A0; font-size:11px;")
                 cv.addWidget(fnm)
                 ab = QHBoxLayout()
