@@ -29,7 +29,19 @@ from .theme import BRAND, GRADE_DISPLAY, SEMANTIC, SEV_CHIP, build_qss
 
 _FREQ_ITEMS = ["사용 안 함", "매일", "매주(월요일)", "매월(1일)"]
 _ACTION_KO = {"mask": "마스킹", "quarantine": "격리", "restore": "복원",
-              "delete": "완전삭제", "figma_scan": "Figma 검사"}
+              "delete": "완전삭제", "figma_scan": "Figma 검사",
+              "scan": "전체 스캔 실행", "closing": "프로젝트 클로징 점검"}
+
+# 감사 액션 → (아이콘, 표시 제목, 분류) — 점검 이력 카드용
+_HIST_META = {
+    "scan": ("search", "전체 스캔 실행", "scan"),
+    "closing": ("folderPlus", "프로젝트 클로징 점검", "scan"),
+    "quarantine": ("lock", "격리 처리", "action"),
+    "mask": ("eyeOff", "마스킹 처리", "action"),
+    "delete": ("trash", "완전삭제 처리", "action"),
+    "restore": ("refresh", "복원 처리", "action"),
+    "figma_scan": ("image", "Figma 검사", "scan"),
+}
 
 
 # ---------------------------------------------------------------- 공용 위젯
@@ -721,10 +733,6 @@ class MainWindow(QMainWindow):
             self._refresh_quarantine()
         elif key == "history":
             self._refresh_history()
-        elif key == "settings" and hasattr(self, "font_info_label"):
-            # 실제 렌더 폰트(fontInfo)를 표시 — 사용자가 직접 확인 가능
-            self.font_info_label.setText(
-                "현재 글꼴: " + self.font_info_label.fontInfo().family())
         self.stack.setCurrentWidget(target)
 
     def _select_nav(self, key: str):
@@ -1519,29 +1527,107 @@ class MainWindow(QMainWindow):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(36, 28, 36, 28)
-        lay.setSpacing(14)
-        lay.addWidget(_h1("점검 이력"))
-        d = QLabel("모든 점검·조치 내역입니다. 발주처 보안 감사·컴플라이언스 증빙으로 활용됩니다.")
-        d.setStyleSheet("color:#565E6C;")
-        lay.addWidget(d)
-        self.h_table = QTableWidget(0, 4)
-        self.h_table.setHorizontalHeaderLabels(["시각", "작업", "대상", "결과"])
-        self.h_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.h_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.h_table.verticalHeader().setVisible(False)
-        lay.addWidget(self.h_table)
+        lay.setSpacing(8)
+        # 헤더: 제목/부제(좌) + 필터 세그먼트 + 내보내기(우)
+        head = QHBoxLayout()
+        tcol = QVBoxLayout(); tcol.setSpacing(3)
+        tcol.addWidget(_h1("점검 이력"))
+        d = QLabel("모든 스캔·조치 내역이 감사 로그로 기록됩니다. 컴플라이언스 증빙의 근거가 됩니다.")
+        d.setStyleSheet("color:#565E6C; font-size:13px;")
+        tcol.addWidget(d)
+        head.addLayout(tcol); head.addStretch()
+        self._hist_filter = "all"
+        self._hist_seg = {}
+        for key, label in [("all", "전체"), ("scan", "스캔"), ("action", "조치")]:
+            b = QPushButton(label); b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda _=False, k=key: self._set_hist_filter(k))
+            self._hist_seg[key] = b
+            head.addWidget(b, alignment=Qt.AlignTop)
+        exp = QPushButton("  내보내기"); exp.setObjectName("Ghost")
+        exp.setIcon(QIcon(icons.line_icon("fileText", 15, "#565E6C")))
+        exp.setCursor(Qt.PointingHandCursor)
+        exp.clicked.connect(self._export_audit)
+        head.addWidget(exp, alignment=Qt.AlignTop)
+        lay.addLayout(head)
+        lay.addSpacing(6)
+
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        host = QWidget(); self.h_list = QVBoxLayout(host)
+        self.h_list.setContentsMargins(0, 0, 0, 0); self.h_list.setSpacing(10)
+        self.h_list.addStretch()
+        scroll.setWidget(host)
+        lay.addWidget(scroll, 1)
+        self.h_empty = QLabel("아직 기록된 점검 이력이 없습니다.")
+        self.h_empty.setAlignment(Qt.AlignCenter)
+        self.h_empty.setStyleSheet("color:#8B92A0; padding:24px 0;")
+        lay.addWidget(self.h_empty)
+        self._set_hist_filter("all")
         return w
 
+    def _set_hist_filter(self, key: str):
+        self._hist_filter = key
+        for k, b in self._hist_seg.items():
+            on = k == key
+            b.setStyleSheet(
+                "QPushButton{border:1px solid #E7E9EE;border-radius:8px;padding:5px 14px;"
+                "background:%s;color:%s;font-weight:700;font-size:12px;}"
+                % (("#fff", "#B0123F") if on else ("#F7F8FA", "#565E6C")))
+        self._refresh_history()
+
     def _refresh_history(self):
-        self.h_table.setRowCount(0)
+        if not hasattr(self, "h_list"):
+            return
+        while self.h_list.count() > 1:
+            it = self.h_list.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        flt = getattr(self, "_hist_filter", "all")
+        shown = 0
         for e in reversed(_read_audit_tail(500)):
-            r = self.h_table.rowCount()
-            self.h_table.insertRow(r)
-            self.h_table.setItem(r, 0, QTableWidgetItem(e.get("ts", "")))
-            self.h_table.setItem(r, 1, QTableWidgetItem(
-                _ACTION_KO.get(e.get("action", ""), e.get("action", ""))))
-            self.h_table.setItem(r, 2, QTableWidgetItem(e.get("path", "")))
-            self.h_table.setItem(r, 3, QTableWidgetItem(e.get("result", "")))
+            action = e.get("action", "")
+            icn, title, kind = _HIST_META.get(action, ("fileText", _ACTION_KO.get(action, action), "action"))
+            if flt != "all" and kind != flt:
+                continue
+            self.h_list.insertWidget(shown, self._history_card(e, icn, title, kind))
+            shown += 1
+        self.h_empty.setVisible(shown == 0)
+
+    def _history_card(self, e: dict, icn: str, title: str, kind: str) -> QFrame:
+        from pathlib import Path as _P
+        card = QFrame(); card.setObjectName("Card")
+        h = QHBoxLayout(card); h.setContentsMargins(16, 12, 16, 12); h.setSpacing(13)
+        box = QLabel(); box.setFixedSize(40, 40); box.setAlignment(Qt.AlignCenter)
+        tone = {"scan": (BRAND["pink50"], BRAND["brand"]),
+                "action": ("#F1F2F4", "#565E6C")}[kind]
+        box.setStyleSheet(f"background:{tone[0]}; border-radius:10px;")
+        box.setPixmap(icons.line_icon(icn, 19, tone[1], 2))
+        h.addWidget(box)
+        col = QVBoxLayout(); col.setSpacing(2)
+        t = QLabel(title); t.setStyleSheet("font-weight:800; font-size:13.5px;")
+        col.addWidget(t)
+        if kind == "scan":
+            sub = (f"{e.get('profile','')} 프로파일 · {e.get('files',0):,}개 검사"
+                   f" · 위험 {e.get('findings',0)}건")
+        else:
+            name = _P(e.get("path", "")).name or e.get("path", "")
+            sub = f"{name} · {e.get('result','')}"
+        sl = QLabel(sub); sl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+        col.addWidget(sl)
+        h.addLayout(col, 1)
+        ts = e.get("ts", "")
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(ts)
+            ts = f"{dt.month}/{dt.day} {dt.hour:02d}:{dt.minute:02d}"
+        except (ValueError, TypeError):
+            pass
+        when = QLabel(ts)
+        when.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+        h.addWidget(when, alignment=Qt.AlignTop)
+        return card
 
     # -------------------------------------------------------- 설정
     def _build_settings(self) -> QWidget:
@@ -1630,9 +1716,6 @@ class MainWindow(QMainWindow):
         r3.addWidget(t3); r3.addStretch()
         r3.addWidget(QLabel("한국어"))
         gl.addLayout(r3)
-        self.font_info_label = QLabel("현재 글꼴: 확인 중…")
-        self.font_info_label.setStyleSheet("color:#8B92A0; font-size:11px;")
-        gl.addWidget(self.font_info_label)
         gl.addStretch()
         self._set_theme(self.theme)
         return self._tab_wrap(c)
@@ -2134,6 +2217,17 @@ class MainWindow(QMainWindow):
         grade = summary.risk_grade
         self._scan_grade = grade
         self._action_counts = {"mask": 0, "quarantine": 0, "delete": 0}
+        # 스캔 완료를 감사 로그에 기록(점검 이력 표시용)
+        try:
+            from . import actions as _A
+            scanned = len(summary.file_results)
+            _A.write_audit(
+                "closing" if getattr(self, "_closing_mode", False) else "scan",
+                "", "success",
+                {"files": scanned, "findings": total,
+                 "profile": ", ".join(self.profiles), "grade": grade})
+        except Exception:
+            pass
         # 위험도별 카운트
         bysev = {"높음": 0, "중간": 0, "낮음": 0}
         for r in summary.file_results:
