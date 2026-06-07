@@ -900,17 +900,49 @@ class MainWindow(QMainWindow):
             it = self.recent_box.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        entries = _read_audit_tail(6)
+        entries = list(reversed(_read_audit_tail(6)))
         if not entries:
             e = QLabel("아직 점검 이력이 없습니다. ‘지금 점검하기’로 첫 점검을 시작하세요.")
             e.setStyleSheet("color:#8B92A0; padding:8px 0;")
             self.recent_box.addWidget(e)
             return
         for e in entries:
-            lbl = QLabel(f"·  {e.get('ts','')}   {_ACTION_KO.get(e.get('action',''), e.get('action',''))}"
-                         f"   {Path(e.get('path','')).name}   [{e.get('result','')}]")
-            lbl.setStyleSheet("color:#565E6C; padding:3px 0;")
-            self.recent_box.addWidget(lbl)
+            self.recent_box.addWidget(self._recent_row(e))
+
+    def _recent_row(self, e: dict) -> QWidget:
+        action = e.get("action", "")
+        icn, _t, kind = _HIST_META.get(action, ("fileText", _ACTION_KO.get(action, action), "action"))
+        row = QWidget()
+        h = QHBoxLayout(row); h.setContentsMargins(0, 5, 0, 5); h.setSpacing(11)
+        tone = (BRAND["pink50"], BRAND["brand"]) if kind == "scan" else ("#F1F2F4", "#565E6C")
+        box = QLabel(); box.setFixedSize(34, 34); box.setAlignment(Qt.AlignCenter)
+        box.setStyleSheet(f"background:{tone[0]}; border-radius:9px;")
+        box.setPixmap(icons.line_icon(icn, 17, tone[1], 2))
+        h.addWidget(box)
+        col = QVBoxLayout(); col.setSpacing(1)
+        if action in ("scan", "closing"):
+            title = f"{_ACTION_KO.get(action, action)} — 위험 {e.get('findings', 0)}건 발견"
+        elif action in ("quarantine", "mask", "delete", "restore"):
+            title = f"{_ACTION_KO.get(action, action)} — {Path(e.get('path','')).name}"
+        else:
+            title = _ACTION_KO.get(action, action)
+        t = QLabel(title); t.setStyleSheet("font-weight:700; font-size:12.5px;")
+        col.addWidget(t)
+        ts = e.get("ts", "")
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(ts)
+            ts = f"{self._rel_time(e.get('ts',''))} · {dt.month}/{dt.day} {dt.hour:02d}:{dt.minute:02d}"
+        except (ValueError, TypeError):
+            pass
+        s = QLabel(ts); s.setStyleSheet("color:#8B92A0; font-size:11px;")
+        col.addWidget(s)
+        h.addLayout(col, 1)
+        if e.get("profile"):
+            tag = QLabel(e["profile"])
+            tag.setStyleSheet("color:#8B92A0; font-size:11px;")
+            h.addWidget(tag, alignment=Qt.AlignTop)
+        return row
 
     # -------------------------------------------------------- 스캔 진행
     def _build_scanning(self) -> QWidget:
@@ -1497,6 +1529,8 @@ class MainWindow(QMainWindow):
                 return f"{int(secs // 60)}분 전"
             if secs < 86400:
                 return f"{int(secs // 3600)}시간 전"
+            if secs < 86400 * 30:
+                return f"{int(secs // 86400)}일 전"
             return dt.strftime("%m/%d %H:%M")
         except ValueError:
             return iso
@@ -2009,6 +2043,14 @@ class MainWindow(QMainWindow):
         self.sc_kinds_grid.setSpacing(8)
         self.sc_kinds_grid.setContentsMargins(0, 8, 0, 0)
         kl.addLayout(self.sc_kinds_grid)
+        self.sc_kind_note = QLabel("")
+        self.sc_kind_note.setWordWrap(True)
+        self.sc_kind_note.setStyleSheet(f"color:{BRAND['brand']}; font-size:11.5px; font-weight:600; padding-top:10px;")
+        kl.addWidget(self.sc_kind_note)
+        self.sc_kind_formats = QLabel("")
+        self.sc_kind_formats.setWordWrap(True)
+        self.sc_kind_formats.setStyleSheet("color:#8B92A0; font-size:11.5px; padding-top:6px;")
+        kl.addWidget(self.sc_kind_formats)
         kl.addStretch()
         cols.addWidget(kcard, 1)
         lay.addLayout(cols, 1)
@@ -2062,6 +2104,8 @@ class MainWindow(QMainWindow):
             p = home / n
             on = p.exists() and (scope != "quick" or idx < 2)
             self._add_folder_row(str(p), on)
+        # 전체 드라이브 옵션(정본 04)
+        self._add_folder_row("전체 드라이브 (C:\\)", False)
         self._refresh_folder_count()
         # 검출 항목(직무 기반) — 크림슨 pill 칩
         kinds = ["주민등록번호", "신용카드", "전화·이메일", "계좌번호", "사업자번호"]
@@ -2071,6 +2115,22 @@ class MainWindow(QMainWindow):
         self._fill_kind_chips(kinds, ocr_on)
         self.sc_kind_count.setText(f"{len(kinds) + (1 if ocr_on else 0)}개 항목")
         self.sc_kind_sub.setText(f"직무: {', '.join(self.profiles)} 기본값")
+        # 직무 특화 설명 + 파일 형식(정본 04)
+        if "개발자" in self.profiles:
+            self.sc_kind_note.setText("개발자 특화 — 소스코드·설정파일의 시크릿을 엔트로피로 검증합니다")
+            self.sc_kind_note.setVisible(True)
+        else:
+            self.sc_kind_note.setVisible(False)
+        from .profiles import PROFILE_EXTENSIONS
+        exts = set()
+        for role in self.profiles:
+            exts |= PROFILE_EXTENSIONS.get(role, set())
+        if exts:
+            fmt = ", ".join(sorted(e.lstrip(".") for e in exts))
+            self.sc_kind_formats.setText(f"파일 형식: {fmt}")
+            self.sc_kind_formats.setVisible(True)
+        else:
+            self.sc_kind_formats.setVisible(False)
         self._select_nav("dashboard")
         self.stack.setCurrentWidget(self.scanconfig)
 
@@ -2081,6 +2141,7 @@ class MainWindow(QMainWindow):
                 it.widget().deleteLater()
         items = [(k, True) for k in kinds]
         items.append(("이미지 속 정보(OCR)", ocr_on))
+        items.append(("한글(HWP) 문서", True))
         for i, (text, on) in enumerate(items):
             self.sc_kinds_grid.addWidget(self._kind_chip(text, on), i // 2, i % 2)
 
