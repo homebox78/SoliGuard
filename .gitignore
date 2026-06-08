@@ -41,3 +41,6 @@ examples/*_masked.*
 *_masked.docx
 *_masked.csv
 *_masked.txt
+
+# 빌드 산출물(루트 onefile exe)
+SoliGuard.exe

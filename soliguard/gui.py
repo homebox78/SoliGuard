@@ -53,7 +53,41 @@ _TYPE_ICON = {
     "주소": "home", "IP 주소": "database",
     "API 키/시크릿": "key", "AWS Access Key": "key",
     "DB 접속정보": "database", "개인키(PEM)": "key",
+    "법인등록번호": "fileText",
+    "GitHub 토큰": "key", "Slack 토큰": "key", "Google API 키": "key",
+    "Stripe 키": "key", "npm 토큰": "key", "JWT 토큰": "key",
 }
+
+# 검출 유형 → 평이한 설명(무엇인지 + 왜 위험한지). 결과 행 툴팁·미리보기에 노출.
+_TYPE_DESC = {
+    "주민등록번호": "가장 민감한 신원정보입니다. 유출 시 명의도용·금융사기에 악용될 수 있어 즉시 조치가 필요합니다.",
+    "외국인등록번호": "외국인의 신원을 식별하는 민감정보입니다. 주민등록번호에 준해 보호해야 합니다.",
+    "법인등록번호": "법인을 식별하는 등록번호입니다. 계약·금융 문서에서 함께 노출되면 위험이 커집니다.",
+    "사업자등록번호": "사업체 식별번호입니다. 단독 노출 위험은 중간이나 다른 정보와 결합 시 주의가 필요합니다.",
+    "신용카드번호": "결제에 직접 쓰일 수 있는 금융정보입니다. 유출 시 부정결제 위험이 큽니다.",
+    "계좌번호": "예금 계좌 식별정보입니다. 예금주·연락처와 함께 노출되면 위험합니다.",
+    "전화번호": "개인 연락처입니다. 스팸·피싱·본인확인 우회에 악용될 수 있습니다.",
+    "휴대전화번호": "개인 연락처입니다. 스팸·피싱·본인확인 우회에 악용될 수 있습니다.",
+    "이메일": "개인 식별·연락 수단입니다. 계정 탈취·피싱의 출발점이 될 수 있습니다.",
+    "여권번호": "국제 신원증명 번호입니다. 유출 시 위·변조 및 명의도용에 악용될 수 있습니다.",
+    "운전면허번호": "신분증명에 쓰이는 식별번호입니다. 신원도용 위험이 있습니다.",
+    "주소": "거주지 정보입니다. 다른 개인정보와 결합하면 특정 개인을 식별할 수 있습니다.",
+    "IP 주소": "접속 단말·서버를 식별합니다. 단독 위험은 낮지만 내부망 정보 노출일 수 있습니다.",
+    "API 키/시크릿": "시스템 접근 자격증명입니다. 유출 시 서비스 무단 접근·과금 피해가 발생할 수 있습니다.",
+    "AWS Access Key": "클라우드(AWS) 접근 키입니다. 유출 시 인프라 탈취·요금 폭탄 위험이 매우 큽니다.",
+    "DB 접속정보": "데이터베이스 접속 자격증명입니다. 유출 시 전체 데이터 유출로 이어질 수 있습니다.",
+    "개인키(PEM)": "암호화 개인키입니다. 유출 시 서버·통신 위장 및 복호화에 악용됩니다.",
+    "GitHub 토큰": "소스 저장소 접근 토큰입니다. 유출 시 코드·비밀정보 탈취 위험이 큽니다.",
+    "Slack 토큰": "메신저 작업공간 접근 토큰입니다. 유출 시 대화·파일 열람 위험이 있습니다.",
+    "Google API 키": "구글 서비스 접근 키입니다. 유출 시 무단 사용·과금 피해가 발생할 수 있습니다.",
+    "Stripe 키": "결제 시스템 비밀 키입니다. 유출 시 결제·환불 조작 위험이 큽니다.",
+    "npm 토큰": "패키지 배포 토큰입니다. 유출 시 악성 패키지 배포에 악용될 수 있습니다.",
+    "JWT 토큰": "인증 세션 토큰입니다. 유출 시 사용자 계정 도용에 악용될 수 있습니다.",
+}
+
+
+def _type_desc(info_type: str) -> str:
+    return _TYPE_DESC.get(info_type, "민감정보로 분류된 항목입니다. 노출 범위를 확인해 조치하세요.")
 
 
 # ---------------------------------------------------------------- 공용 위젯
@@ -328,9 +362,13 @@ class ScanWorker(QThread):
         from .engine import DEFAULT_EXCLUDES, PROFILE_ROLE, ScanSummary
         from .scanner import collect_files, scan_file
 
+        from .profiles import extensions_for
+
         roles = {PROFILE_ROLE[p] for p in self.profiles if p in PROFILE_ROLE}
         engine = DetectionEngine(roles=roles or None, user_whitelist=self.user_whitelist)
-        files = collect_files(self.folders, exclude=DEFAULT_EXCLUDES)
+        # 직무 프로파일 = 검사할 파일 확장자 필터(폴더와 무관).
+        exts = extensions_for(self.profiles)
+        files = collect_files(self.folders, exclude=DEFAULT_EXCLUDES, extensions=exts)
         total = len(files)
         results, scanned, skipped = [], 0, 0
         buckets = {"주민등록번호": 0, "신용카드번호": 0, "API키/DB": 0,
@@ -1645,9 +1683,11 @@ class MainWindow(QMainWindow):
         fic = QLabel(); fic.setFixedSize(17, 17)
         fic.setPixmap(icons.line_icon(_TYPE_ICON.get(finding.info_type, "fileText"), 16, "#565E6C", 2))
         h.addWidget(fic)
-        col = QVBoxLayout(); col.setSpacing(1)
+        desc = _type_desc(finding.info_type)
+        col = QVBoxLayout(); col.setSpacing(2)
         t1row = QHBoxLayout(); t1row.setSpacing(6)
-        t1 = QLabel(finding.info_type); t1.setStyleSheet("font-weight:700; font-size:12.5px;")
+        t1 = QLabel(finding.info_type); t1.setStyleSheet("font-weight:700; font-size:13px;")
+        t1.setToolTip(desc)
         t1row.addWidget(t1)
         if finding.field:  # 구조화 포맷(표/JSON)에서 검출 — 출처 열 라벨
             fld = QLabel(finding.field)
@@ -1659,17 +1699,34 @@ class MainWindow(QMainWindow):
             t1row.addWidget(fld)
         t1row.addStretch()
         col.addLayout(t1row)
+        # 평이한 설명(무엇인지·왜 위험한지) — 한눈에 이해되도록 한 줄 노출.
+        # Ignored 가로 정책: 라벨이 가로 폭을 강제하지 않아 행 전체가 넓어져
+        # 조치 아이콘이 잘리는 것을 막는다(남는 폭에서 자동 말줄임).
+        from PySide6.QtWidgets import QSizePolicy
+        tdesc = QLabel(desc)
+        tdesc.setStyleSheet("color:#7A828F; font-size:11px;")
+        tdesc.setWordWrap(False)
+        tdesc.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        tdesc.setToolTip(desc)
+        col.addWidget(tdesc)
         src = f"{path.name} · line {finding.line}"
         if finding.field:
             src += f" · 열 “{finding.field}”"
         t2 = QLabel(src)
-        t2.setStyleSheet("color:#8B92A0; font-size:11px;")
+        t2.setStyleSheet("color:#A6ACB8; font-size:10.5px;")
         col.addWidget(t2)
         h.addLayout(col, 1)
-        mv = QLabel(finding.masked)
-        mv.setStyleSheet("font-family:'JetBrains Mono','D2Coding',monospace; font-size:11.5px; color:#8B92A0;")
-        mv.setFixedWidth(96)
+        from PySide6.QtGui import QFontMetrics
+        mv = QLabel()
+        mv.setStyleSheet("font-family:'JetBrains Mono','D2Coding',monospace; font-size:11.5px; color:#565E6C;"
+                         " background:#F7F8FA; border:1px solid #EEF0F3; border-radius:6px; padding:3px 6px;")
+        mv.setFixedWidth(108)
+        mv.setText(QFontMetrics(mv.font()).elidedText(finding.masked, Qt.ElideRight, 92))
+        mv.setToolTip(finding.masked)
+        mv.setAlignment(Qt.AlignCenter)
         h.addWidget(mv)
+        h.addWidget(self._icon_btn("search", "파일 열기 (해당 위치)", lambda _=False, p=path, f=finding: self._open_finding(p, f.line)))
+        h.addWidget(self._icon_btn("folder", "탐색기에서 위치 열기", lambda _=False, p=path: self._reveal_file(p)))
         h.addWidget(self._icon_btn("eyeOff", "마스킹", lambda _=False, p=path, f=finding: self._do_action("mask", p, [f])))
         h.addWidget(self._icon_btn("lock", "격리", lambda _=False, p=path, f=finding: self._do_action("quarantine", p, [f])))
         h.addWidget(self._icon_btn("trash", "삭제", lambda _=False, p=path, f=finding: self._do_action("delete", p, [f])))
@@ -2085,16 +2142,75 @@ class MainWindow(QMainWindow):
             if it.widget():
                 it.widget().deleteLater()
         flt = getattr(self, "_hist_filter", "all")
+        from . import results_store
+        items = []
+        # 저장된 스캔(재열람 가능) — 결과 화면으로 다시 열 수 있다.
+        for s in results_store.list_scans():
+            items.append({"kind": "scan", "ts": s.get("at", ""), "scan": s})
+        # 조치 내역(감사 로그). 스캔류는 위 저장 결과로 대체하므로 제외.
+        for e in _read_audit_tail(500):
+            if e.get("action") in ("scan", "closing", "figma_scan"):
+                continue
+            items.append({"kind": "action", "ts": e.get("ts", ""), "audit": e})
+        items.sort(key=lambda d: d.get("ts", ""), reverse=True)
         shown = 0
-        for e in reversed(_read_audit_tail(500)):
-            action = e.get("action", "")
-            icn, title, kind = _HIST_META.get(action, ("fileText", _ACTION_KO.get(action, action), "action"))
+        for it in items:
+            kind = it["kind"]
             if flt != "all" and kind != flt:
                 continue
-            self.h_list.insertWidget(shown, self._history_card(e, icn, title, kind))
+            if kind == "scan":
+                card = self._scan_history_card(it["scan"])
+            else:
+                e = it["audit"]
+                action = e.get("action", "")
+                icn, title, _k = _HIST_META.get(
+                    action, ("fileText", _ACTION_KO.get(action, action), "action"))
+                card = self._history_card(e, icn, title, "action")
+            self.h_list.insertWidget(shown, card)
             shown += 1
         self.h_empty.setVisible(shown == 0)
         self.h_scroll.setVisible(shown > 0)
+
+    def _scan_history_card(self, s: dict) -> QFrame:
+        """저장된 스캔 카드 — 클릭/‘결과 보기’로 상세 결과를 다시 연다."""
+        card = _card()
+        h = QHBoxLayout(card); h.setContentsMargins(16, 12, 16, 12); h.setSpacing(13)
+        box = QLabel(); box.setFixedSize(40, 40); box.setAlignment(Qt.AlignCenter)
+        box.setStyleSheet(f"background:{BRAND['pink50']}; border-radius:10px;")
+        box.setPixmap(icons.line_icon("search", 19, BRAND["brand"], 2))
+        h.addWidget(box)
+        col = QVBoxLayout(); col.setSpacing(2)
+        t = QLabel("전체 스캔 실행"); t.setStyleSheet("font-weight:800; font-size:13.5px;")
+        col.addWidget(t)
+        bysev = s.get("bysev", {}) or {}
+        sub = (f"{', '.join(s.get('profiles', []))} · {s.get('scanned', 0):,}개 검사"
+               f" · 위험 {s.get('total', 0)}건  "
+               f"(높음 {bysev.get('높음', 0)}·중간 {bysev.get('중간', 0)}·낮음 {bysev.get('낮음', 0)})")
+        sl = QLabel(sub); sl.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+        col.addWidget(sl)
+        h.addLayout(col, 1)
+        grade = QLabel(s.get("grade", "안전"))
+        self._style_sev_label(grade, {"위험": "높음", "주의": "중간", "안전": "낮음"}.get(
+            s.get("grade", "안전")))
+        h.addWidget(grade, alignment=Qt.AlignVCenter)
+        sid = s.get("id")
+        open_btn = QPushButton("  결과 보기"); open_btn.setObjectName("Ghost")
+        open_btn.setIcon(QIcon(icons.line_icon("chevR", 14, "#565E6C")))
+        open_btn.setCursor(Qt.PointingHandCursor)
+        open_btn.clicked.connect(lambda _=False, i=sid: self._open_saved_scan(i))
+        h.addWidget(open_btn, alignment=Qt.AlignVCenter)
+        ts = s.get("at", "")
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(ts)
+            ts = f"{dt.month}/{dt.day} {dt.hour:02d}:{dt.minute:02d}"
+        except (ValueError, TypeError):
+            pass
+        when = QLabel(ts); when.setStyleSheet("color:#8B92A0; font-size:11.5px;")
+        h.addWidget(when, alignment=Qt.AlignTop)
+        card.setCursor(Qt.PointingHandCursor)
+        card.mousePressEvent = lambda e, i=sid: self._open_saved_scan(i)
+        return card
 
     def _history_card(self, e: dict, icn: str, title: str, kind: str) -> QFrame:
         from pathlib import Path as _P
@@ -2558,25 +2674,18 @@ class MainWindow(QMainWindow):
         self.sc_scope_title.setText(scope_meta[1])
         self.sc_scope_desc.setText(scope_meta[2])
         self.sc_sub.setText(
-            f"직무 “{', '.join(self.profiles)}” 프로파일 기준으로 기본값이 채워졌어요. "
-            "그대로 시작해도 됩니다.")
-        # 추천 폴더 구성
-        from .profiles import PROFILE_FOLDERS
-        names, seen = [], set()
-        for role in self.profiles:
-            for n in PROFILE_FOLDERS.get(role, []):
-                if n not in seen:
-                    seen.add(n); names.append(n)
-        home = Path.home()
+            "검사할 폴더와 파일 형식을 확인하세요. 폴더는 자유롭게 추가할 수 있고, "
+            "파일 형식은 직무 프로파일이 정합니다.")
+        # 스캔 폴더 — 직무와 무관하게 사용자가 설정한 폴더(기본: 다운로드).
+        from .profiles import default_folders
+        folders = list(getattr(self.cfg, "target_folders", None) or []) or default_folders()
         self._sc_folders = []
         while self.sc_folder_box.count():
             it = self.sc_folder_box.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        for idx, n in enumerate(names):
-            p = home / n
-            on = p.exists() and (scope != "quick" or idx < 2)
-            self._add_folder_row(str(p), on)
+        for p in folders:
+            self._add_folder_row(str(p), True)
         # 전체 드라이브 옵션(정본 04)
         self._add_folder_row("전체 드라이브 (C:\\)", False)
         self._refresh_folder_count()
@@ -2682,10 +2791,21 @@ class MainWindow(QMainWindow):
             self._add_folder_row(folder, True)
 
     def _begin_scan(self):
-        folders = [p for b, p in self._sc_folders if b.isChecked()]
-        if not folders:
+        raw = [p for b, p in self._sc_folders if b.isChecked()]
+        if not raw:
             self._warn("스캔 폴더 필요", "스캔할 폴더를 한 곳 이상 선택하세요.")
             return
+        # "전체 드라이브 (C:\)" 가상 항목은 실제 C 드라이브로 변환
+        folders = ["C:\\" if p.startswith("전체 드라이브") else p for p in raw]
+        self._scan_folders_used = folders
+        # 사용자가 고른 실제 폴더를 다음 점검 기본값으로 저장(가상 항목 제외).
+        real = [p for p in raw if not p.startswith("전체 드라이브")]
+        if real and self.cfg is not None:
+            self.cfg.target_folders = real
+            try:
+                self.cfg.save()
+            except Exception:
+                pass
         self.stack.setCurrentWidget(self.scanning)
         self.progress_bar.setValue(0)
         self.pct_label.setText("0%")
@@ -2765,11 +2885,19 @@ class MainWindow(QMainWindow):
 
     def _on_finished(self, summary):
         self.file_results = summary.file_results
+        self._viewing_history = False
         skipped = summary.skipped
         total = summary.total_findings
         grade = summary.risk_grade
         self._scan_grade = grade
         self._action_counts = {"mask": 0, "quarantine": 0, "delete": 0}
+        # 결과를 디스크에 저장 → 점검 이력에서 다시 열어 상세·조치할 수 있음.
+        try:
+            from . import results_store
+            self._last_scan_id = results_store.save_scan(
+                self.profiles, getattr(self, "_scan_folders_used", []), summary)
+        except Exception:
+            pass
         # 스캔 완료를 감사 로그에 기록(점검 이력 표시용)
         try:
             from . import actions as _A
@@ -2846,18 +2974,23 @@ class MainWindow(QMainWindow):
             if it.widget():
                 it.widget().deleteLater()
         counts = {"높음": 0, "중간": 0, "낮음": 0}
+        # 전역 위험도순 정렬 — 가장 위험한(높음) 항목이 항상 목록 최상단에 온다.
+        _SEV_RANK = {"높음": 0, "중간": 1, "낮음": 2}
+        flat = [(Path(r.path), f) for r in results for f in r.findings]
+        flat.sort(key=lambda pf: (
+            _SEV_RANK.get(pf[1].severity.value, 9), str(pf[0]),
+            getattr(pf[1], "line", 0), getattr(pf[1], "start", 0)))
         idx = 0
-        for r in results:
-            for f in r.findings:
-                counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
-                roww, chk = self._table_row(Path(r.path), f)
-                self.tbl_list.insertWidget(idx, roww)
-                self.tbl_rows.append({
-                    "w": roww, "chk": chk, "path": Path(r.path), "f": f,
-                    "sev": f.severity.value,
-                    "text": f"{r.path} {f.info_type} {f.masked}".lower()})
-                self.row_index.append((Path(r.path), f))
-                idx += 1
+        for path, f in flat:
+            counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
+            roww, chk = self._table_row(path, f)
+            self.tbl_list.insertWidget(idx, roww)
+            self.tbl_rows.append({
+                "w": roww, "chk": chk, "path": path, "f": f,
+                "sev": f.severity.value,
+                "text": f"{path} {f.info_type} {f.masked}".lower()})
+            self.row_index.append((path, f))
+            idx += 1
         # 필터 칩 카운트
         for k in ["높음", "중간", "낮음"]:
             self._sev_buttons[k].setText(f"{k} {counts[k]}")
@@ -2982,6 +3115,121 @@ class MainWindow(QMainWindow):
                 cv.addLayout(ab)
                 self._cards_col_box.get(f.severity.value, self._cards_col_box["낮음"]).addWidget(card)
 
+    def _open_finding(self, path, line: int = 0):
+        """검출된 파일을 연다. 텍스트/소스 파일이면 에디터에서 해당 줄로 점프.
+
+        그 외(문서·이미지 등)나 에디터가 없으면 OS 기본 앱으로 연다."""
+        import os
+        import shutil
+        import subprocess as sp
+        p = Path(path)
+        if not p.exists():
+            self._toast("파일을 찾을 수 없습니다(이동·삭제됐을 수 있어요).")
+            return
+        from .extractors import SUPPORTED_TEXT
+        if line and p.suffix.lower() in SUPPORTED_TEXT:
+            for name in ("code", "code.cmd"):     # VS Code 가 있으면 줄로 점프
+                exe = shutil.which(name)
+                if exe:
+                    try:
+                        sp.Popen([exe, "-g", f"{p}:{line}"])
+                        self._toast(f"에디터에서 열었습니다 — line {line}")
+                        return
+                    except Exception:
+                        pass
+        try:
+            if sys.platform == "win32":
+                os.startfile(str(p))  # noqa: S606 - 사용자 의도적 열기
+            elif sys.platform == "darwin":
+                sp.Popen(["open", str(p)])
+            else:
+                sp.Popen(["xdg-open", str(p)])
+            self._toast(f"파일을 열었습니다 — line {line}" if line else "파일을 열었습니다")
+        except Exception:
+            self._toast("파일을 열 수 없습니다.")
+
+    def _reveal_file(self, path):
+        """탐색기(Finder)에서 해당 파일을 선택한 상태로 폴더를 연다."""
+        import subprocess as sp
+        p = Path(path)
+        if not p.exists():
+            self._toast("파일을 찾을 수 없습니다(이동·삭제됐을 수 있어요).")
+            return
+        try:
+            if sys.platform == "win32":
+                # 리스트 인자(셸 미경유)로 전달 → 경로 내 특수문자 주입 차단
+                sp.Popen(["explorer", f"/select,{p}"])
+            elif sys.platform == "darwin":
+                sp.Popen(["open", "-R", str(p)])
+            else:
+                sp.Popen(["xdg-open", str(p.parent)])
+        except Exception:
+            self._toast("위치를 열 수 없습니다.")
+
+    def _rescan_file_findings(self, path: Path) -> list:
+        """파일 1개를 현재 직무 기준으로 재스캔해 검출(원문 포함)을 돌려준다.
+
+        이력에서 마스킹할 때 저장돼 있지 않은 원문(raw)을 복구하는 용도."""
+        try:
+            from .detection import DetectionEngine
+            from .engine import PROFILE_ROLE
+            from .scanner import scan_file
+            roles = {PROFILE_ROLE[p] for p in self.profiles if p in PROFILE_ROLE}
+            wl = list(getattr(self.cfg, "whitelist", []) or [])
+            engine = DetectionEngine(roles=roles or None, user_whitelist=wl)
+            ocr = bool(self.cfg and getattr(self.cfg, "ocr_mode", "local") != "off")
+            return scan_file(Path(path), engine, ocr_enabled=ocr).findings
+        except Exception:
+            return []
+
+    def _reconstruct_results(self, data: dict) -> list:
+        """저장된 스캔 JSON → FileScanResult/Finding 객체 목록(결과 화면 재사용)."""
+        from .detection.base import Confidence, Finding, Severity
+        from .scanner import FileScanResult
+        out = []
+        for r in data.get("results", []):
+            findings = []
+            for d in r.get("findings", []):
+                try:
+                    findings.append(Finding(
+                        detector=d.get("detector", ""),
+                        info_type=d.get("info_type", ""),
+                        severity=Severity(d.get("severity", "낮음")),
+                        confidence=Confidence(d.get("confidence", "패턴일치")),
+                        raw="", masked=d.get("masked", ""),
+                        start=d.get("start", 0), end=d.get("end", 0),
+                        line=d.get("line", 0), context="",
+                        field=d.get("field", ""), weak=d.get("weak", False)))
+                except ValueError:
+                    continue
+            out.append(FileScanResult(
+                path=Path(r.get("path", "")), status=r.get("status", "완료"),
+                findings=findings, error=r.get("error", "")))
+        return out
+
+    def _open_saved_scan(self, sid: str):
+        """점검 이력에서 과거 스캔을 결과 화면으로 다시 연다."""
+        from . import results_store
+        data = results_store.load_scan(sid)
+        if not data:
+            self._warn("결과 없음", "저장된 점검 결과를 찾을 수 없습니다.")
+            return
+        self.file_results = self._reconstruct_results(data)
+        self._viewing_history = True
+        self._action_counts = {"mask": 0, "quarantine": 0, "delete": 0}
+        total = data.get("total", 0)
+        skipped = data.get("skipped", 0)
+        self.result_title.setText(f"점검 결과 — 위험 {total}건  ·  이력 보기")
+        self.result_sub.setText(
+            f"{data.get('at', '')} · 검사 {data.get('scanned', 0)} / 검사불가 {skipped}"
+            f" · 직무 {', '.join(data.get('profiles', []))}"
+            "  ·  미리보기는 항상 마스킹된 형태로만 표시됩니다.")
+        self.unread_banner.setVisible(False)
+        self._populate_table(self.file_results)
+        self._set_result_view("table")
+        self._select_nav("history")
+        self.stack.setCurrentWidget(self.results)
+
     def _do_action(self, action: str, path: Path, findings: list):
         from . import actions as A
 
@@ -2994,6 +3242,12 @@ class MainWindow(QMainWindow):
             return top.info_type, top.severity.value
 
         if action == "mask":
+            # 이력에서 연 결과는 원문(raw)을 저장하지 않으므로, 마스킹 직전
+            # 해당 파일을 재스캔해 원문을 복구한다.
+            if any(not getattr(f, "raw", "") for f in findings):
+                rescanned = self._rescan_file_findings(path)
+                if rescanned:
+                    findings = rescanned
             r = A.mask_in_text_file(path, findings)
             ok = r.status == "success"
         elif action == "quarantine":
@@ -3042,7 +3296,9 @@ class MainWindow(QMainWindow):
         self.pv_path.setToolTip(str(path))
         color, bg, line = SEV_CHIP.get(f.severity.value, ("#8B92A0", "#F1F2F4", "#E7E9EE"))
         self.pv_type.setText(
-            f'{f.info_type}　<span style="color:{color};font-weight:700;">● {f.severity.value}</span>')
+            f'{f.info_type}　<span style="color:{color};font-weight:700;">● {f.severity.value}</span>'
+            f'<br><span style="color:#7A828F;font-size:11px;font-weight:400;">{_type_desc(f.info_type)}</span>')
+        self.pv_type.setWordWrap(True)
         self.pv_value.setText(f.masked)
         ctx = f.context or ""
         if f.raw and f.raw in ctx:

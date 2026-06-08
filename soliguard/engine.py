@@ -108,7 +108,11 @@ def run_scan(
     excludes = (excludes or set()) | DEFAULT_EXCLUDES
 
     engine = DetectionEngine(roles=role_set or None, user_whitelist=user_whitelist)
-    files = collect_files(folders, exclude=excludes)
+    # 직무 프로파일 = 검사할 파일 확장자 필터(폴더와 무관). 자동 점검(에이전트)도 동일 적용.
+    from .profiles import extensions_for
+    sel_profiles = list(profiles or []) + ([profile] if profile else [])
+    exts = extensions_for(sel_profiles) if sel_profiles else None
+    files = collect_files(folders, exclude=excludes, extensions=exts)
     total = len(files)
 
     summary = ScanSummary()

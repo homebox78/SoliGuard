@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from . import fonts, icons
 from .config import AppConfig, ScheduleConfig
-from .profiles import ALL_PROFILES, PROFILE_DESC, PROFILE_FOLDERS
+from .profiles import ALL_PROFILES, PROFILE_DESC, default_folders
 from .theme import BRAND
 
 _CRIMSON = BRAND["brand"]
@@ -137,6 +137,8 @@ class OnboardingWizard(QDialog):
         self.sched = "weekly"
         self.ocr = True
         self._folder_checks = []
+        # 폴더는 직무와 무관하게 사용자가 직접 고른다. 기본값은 다운로드 폴더 하나.
+        self._folder_paths = list(default_folders())
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(40, 34, 40, 34)
@@ -320,34 +322,46 @@ class OnboardingWizard(QDialog):
         w = QWidget()
         v = QVBoxLayout(w)
         v.setSpacing(6)
-        h2 = QLabel("스캔할 폴더를 확인하세요")
+        h2 = QLabel("어떤 폴더를 검사할까요?")
         h2.setStyleSheet("font-size:18px; font-weight:800;")
         v.addWidget(h2)
-        self.folder_sub = QLabel("직무에 맞춰 추천 폴더가 미리 선택돼 있어요.")
+        self.folder_sub = QLabel(
+            "기본으로 다운로드 폴더가 선택돼 있어요. 필요하면 폴더를 더 추가하세요.")
         self.folder_sub.setObjectName("Sub")
         v.addWidget(self.folder_sub)
         self.folder_box = QVBoxLayout()
         self.folder_box.setSpacing(8)
         v.addLayout(self.folder_box)
+        addf = QPushButton("  폴더 추가")
+        addf.setObjectName("Ghost")
+        addf.setIcon(QIcon(icons.line_icon("plus", 16, "#565E6C", 2.4)))
+        addf.setCursor(Qt.PointingHandCursor)
+        addf.clicked.connect(self._add_folder)
+        v.addSpacing(2)
+        v.addWidget(addf)
         v.addStretch()
         return w
 
+    def _add_folder(self):
+        from PySide6.QtWidgets import QFileDialog
+        d = QFileDialog.getExistingDirectory(self, "검사할 폴더 추가", str(Path.home()))
+        if not d:
+            return
+        d = d.replace("/", "\\")
+        if d not in self._folder_paths:
+            self._folder_paths.append(d)
+            self._refresh_folders()
+
     def _refresh_folders(self):
-        # 기존 제거
+        # 현재 체크 상태 보존 후 재구성
+        checked = {p: b.isChecked() for b, p in self._folder_checks}
         while self.folder_box.count():
             it = self.folder_box.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
         self._folder_checks = []
-        names, seen = [], set()
-        for role in self.roles:
-            for n in PROFILE_FOLDERS.get(role, []):
-                if n not in seen:
-                    seen.add(n); names.append(n)
-        home = Path.home()
-        for n in names:
-            p = home / n
-            on = p.exists()
+        for p in self._folder_paths:
+            on = checked.get(p, True)
             b = QPushButton(); b.setObjectName("ChkCard")
             b.setCheckable(True); b.setChecked(on); b.setMinimumHeight(44)
             h = QHBoxLayout(b); h.setContentsMargins(13, 9, 13, 9); h.setSpacing(11)
@@ -360,10 +374,21 @@ class OnboardingWizard(QDialog):
             pl.setStyleSheet("font-family:'JetBrains Mono','D2Coding',monospace;"
                              "font-size:12px; color:#14161C;")
             h.addWidget(pl); h.addStretch()
+            rm = QPushButton(); rm.setFixedSize(24, 24); rm.setCursor(Qt.PointingHandCursor)
+            rm.setIcon(QIcon(icons.line_icon("trash", 14, "#8B92A0", 2)))
+            rm.setStyleSheet("QPushButton{background:transparent;border:none;}"
+                             "QPushButton:hover{background:#F1F2F4;border-radius:6px;}")
+            rm.clicked.connect(lambda _=False, path=p: self._remove_folder(path))
+            h.addWidget(rm)
             b.toggled.connect(lambda c, cb=chk: cb.setPixmap(_checkbox_pm(c)))
             self.folder_box.addWidget(b)
             self._folder_checks.append((b, str(p)))
-        self.folder_sub.setText(f"직무 “{', '.join(self.roles)}”에 맞춰 추천 폴더가 미리 선택돼 있어요.")
+
+    def _remove_folder(self, path: str):
+        self._folder_paths = [p for p in self._folder_paths if p != path]
+        if not self._folder_paths:  # 최소 한 곳 유지
+            self._folder_paths = list(default_folders())
+        self._refresh_folders()
 
     # ---- 페이지 4: 자동 점검 ----
     def _page_schedule(self) -> QWidget:

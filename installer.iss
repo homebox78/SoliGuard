@@ -18,7 +18,8 @@ WizardImageStretch=yes
 AppPublisherURL=https://github.com/homebox78/SoliGuard
 
 [Files]
-Source: "dist\SoliGuard\*"; DestDir: "{app}"; Flags: recursesubdirs
+; onefile 빌드: 단일 exe 하나만 설치
+Source: "dist\SoliGuard.exe"; DestDir: "{app}"
 
 [Icons]
 Name: "{group}\SoliGuard"; Filename: "{app}\SoliGuard.exe"
@@ -35,7 +36,7 @@ Filename: "{app}\SoliGuard.exe"; Description: "SoliGuard 실행"; \
   Flags: nowait postinstall skipifsilent
 ; 자동 점검을 선택하면 매주 월요일 09시 작업 등록(에이전트는 --once 로 1회 스캔)
 Filename: "schtasks"; \
-  Parameters: "/Create /TN SoliGuard_PeriodicScan /TR ""'{app}\SoliGuardAgent.exe' --once"" /SC WEEKLY /D MON /ST 09:00 /F"; \
+  Parameters: "/Create /TN SoliGuard_PeriodicScan /TR ""'{app}\SoliGuard.exe' --once"" /SC WEEKLY /D MON /ST 09:00 /F"; \
   Tasks: autoscan; Flags: runhidden
 
 [UninstallRun]

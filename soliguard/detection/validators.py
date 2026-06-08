@@ -20,6 +20,7 @@ __all__ = [
     "rrn_is_foreigner",
     "luhn_valid",
     "validate_brn",
+    "validate_corp_reg",
     "validate_passport",
     "validate_driver_license",
     "valid_ipv4",
@@ -150,6 +151,26 @@ def validate_brn(text: str) -> bool:
     total += (int(d[8]) * 5) // 10
     check = (10 - (total % 10)) % 10
     return check == int(d[9])
+
+
+# 법인등록번호 체크섬 가중치(앞 12자리에 1,2 교대 적용). 부동산등기용
+# 등록번호와 동일 산식이다.
+_CORP_WEIGHTS = (1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2)
+
+
+def validate_corp_reg(text: str) -> bool:
+    """법인등록번호(13자리) 검증.
+
+    사업자등록번호(10자리)와는 다른 별개의 번호다. 산식:
+        sum = Σ(d_i * w_i)  (i=1..12, w=1,2 교대)
+        check = (10 - (sum % 10)) % 10  == d13
+    """
+    d = digits_only(text)
+    if len(d) != 13:
+        return False
+    total = sum(int(d[i]) * _CORP_WEIGHTS[i] for i in range(12))
+    check = (10 - (total % 10)) % 10
+    return check == int(d[12])
 
 
 # 한국 여권번호 발급기호(전자여권 기준): M 일반, S 긴급, R 거주여권,

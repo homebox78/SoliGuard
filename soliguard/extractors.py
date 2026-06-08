@@ -72,11 +72,24 @@ class _DocBuilder:
 
 
 SUPPORTED_TEXT = {
-    ".txt", ".csv", ".log", ".json", ".xml", ".md", ".py", ".java", ".js",
-    ".ts", ".kt", ".go", ".sql", ".yml", ".yaml", ".ini", ".cfg",
-    ".properties", ".env", ".html", ".sh", ".bat", ".ps1",
+    # 일반 텍스트·데이터
+    ".txt", ".csv", ".tsv", ".log", ".json", ".xml", ".md", ".rst",
+    # 소스코드(개발자 직무 — 평문으로 전부 읽힘)
+    ".py", ".java", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".vue",
+    ".svelte", ".php", ".rb", ".go", ".rs", ".kt", ".kts", ".swift",
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cs", ".scala", ".dart",
+    ".lua", ".pl", ".pm", ".r", ".groovy", ".gradle", ".jsp", ".asp",
+    ".aspx", ".vb", ".sql", ".graphql", ".gql", ".proto",
+    # 웹·스타일
+    ".html", ".htm", ".css", ".scss", ".sass", ".less",
+    # 설정·인프라
+    ".yml", ".yaml", ".ini", ".cfg", ".conf", ".config", ".toml",
+    ".properties", ".env", ".tf", ".tfvars", ".dockerfile", ".sh",
+    ".bash", ".zsh", ".bat", ".cmd", ".ps1", ".psm1",
+    # 경량 DB 덤프(텍스트). 바이너리 .db/.sqlite 도 best-effort 로 읽는다.
+    ".db", ".sqlite", ".sqlite3",
 }
-SUPPORTED_OFFICE = {".xlsx", ".xls", ".docx"}
+SUPPORTED_OFFICE = {".xlsx", ".xls", ".docx", ".pptx"}
 SUPPORTED_HWP = {".hwp", ".hwpx"}
 SUPPORTED_PDF = {".pdf"}
 SUPPORTED_IMAGE = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
@@ -106,6 +119,8 @@ def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
             return _extract_xls(path)
         if ext == ".docx":
             return _extract_docx(path)
+        if ext == ".pptx":
+            return _extract_pptx(path)
         if ext == ".hwpx":
             return _extract_hwpx(path)
         if ext == ".hwp":
@@ -356,6 +371,22 @@ def _extract_docx(path: Path) -> str:
             if cells:
                 parts.append(" ".join(cells))
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# 파워포인트(pptx) - 표준 라이브러리 zip+xml (PM 직무 산출물)
+# ---------------------------------------------------------------------------
+def _extract_pptx(path: Path) -> str:
+    """pptx: 슬라이드 XML의 <a:t> 텍스트 추출(외부 라이브러리 불필요)."""
+    if not zipfile.is_zipfile(path):
+        raise ExtractionError("유효한 pptx(zip) 가 아님")
+    parts: list[str] = []
+    with zipfile.ZipFile(path) as z:
+        for name in z.namelist():
+            if name.startswith("ppt/slides/") and name.endswith(".xml"):
+                xml = z.read(name).decode("utf-8", errors="replace")
+                parts += re.findall(r"<a:t>(.*?)</a:t>", xml, re.DOTALL)
+    return "\n".join(_strip_xml(p) for p in parts)
 
 
 # ---------------------------------------------------------------------------

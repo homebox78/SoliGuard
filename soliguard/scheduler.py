@@ -72,10 +72,13 @@ def build_schtasks_command(sched: ScheduleConfig, agent_exe: str | Path) -> list
 # Windows 작업 스케줄러 등록/해제
 # ---------------------------------------------------------------------------
 def _agent_exe_path() -> str:
-    """배포 시 SoliGuardAgent.exe, 개발 시 'python -m soliguard.scheduler'."""
-    exe = Path(sys.executable).parent / "SoliGuardAgent.exe"
-    if exe.exists():
-        return str(exe)
+    """배포(onefile) 시 자기 자신(SoliGuard.exe), 개발 시 'python -m soliguard.scheduler'.
+
+    단일 exe 구조이므로 SoliGuard.exe 가 `--once` 인자를 받으면 에이전트로 동작한다
+    (run_gui.py 진입점 참고). 별도 SoliGuardAgent.exe 는 더 이상 만들지 않는다.
+    """
+    if getattr(sys, "frozen", False):
+        return sys.executable  # PyInstaller 번들된 SoliGuard.exe
     return f'{sys.executable}" -m soliguard.scheduler "'  # 개발 환경 폴백
 
 

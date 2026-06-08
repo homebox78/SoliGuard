@@ -57,14 +57,21 @@ def scan_file(
 
 
 def collect_files(
-    targets: list[str | Path], exclude: set[str] | None = None
+    targets: list[str | Path],
+    exclude: set[str] | None = None,
+    extensions: set[str] | None = None,
 ) -> list[Path]:
     """대상(파일/폴더)에서 지원 포맷 파일 경로를 수집한다.
+
+    extensions 가 주어지면 그 확장자(소문자, 점 포함)만 수집한다 — 직무
+    프로파일이 정한 '검사할 파일 형식' 필터. None/빈 집합이면 지원 포맷 전체.
+    어떤 경우에도 추출 불가능한(미지원) 형식은 제외한다(is_supported).
 
     GUI가 진행률(N/M)을 표시하려면 전체 파일 수를 먼저 알아야 하므로
     스캔과 분리해 제공한다.
     """
     exclude = exclude or set()
+    exts = {e.lower() for e in extensions} if extensions else None
     out: list[Path] = []
     for target in targets:
         target = Path(target)
@@ -76,6 +83,8 @@ def collect_files(
             candidates = []
         for fpath in candidates:
             if any(part in exclude for part in fpath.parts):
+                continue
+            if exts is not None and fpath.suffix.lower() not in exts:
                 continue
             if is_supported(fpath):
                 out.append(fpath)

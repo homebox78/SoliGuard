@@ -14,12 +14,74 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from .extractors import _decode_bytes
+
+
+# ---------------------------------------------------------------------------
+# Windows DPAPI — 격리 키를 현재 사용자 계정에 묶어 보호(추가 의존성 없음).
+# 키를 OS 보안 저장소로 위임하므로, 격리 폴더(.enc/.meta.json)만 탈취해도
+# 다른 사용자/PC 에서는 복호화할 수 없다. 비윈도우/실패 시 None 을 반환하고
+# 호출부가 (보안이 약한) 평문 키 폴백을 사용한다.
+# ---------------------------------------------------------------------------
+def _dpapi(data: bytes, unprotect: bool) -> "bytes | None":
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD),
+                        ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        buf = ctypes.create_string_buffer(data, len(data))
+        blob_in = DATA_BLOB(len(data),
+                            ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+        blob_out = DATA_BLOB()
+        crypt32 = ctypes.windll.crypt32
+        fn = crypt32.CryptUnprotectData if unprotect else crypt32.CryptProtectData
+        # CryptProtectData(pDataIn, szDesc, pEntropy, pvRes, pPrompt, dwFlags, pDataOut)
+        args = [ctypes.byref(blob_in), None, None, None, None, 0,
+                ctypes.byref(blob_out)]
+        if unprotect:
+            # CryptUnprotectData(pDataIn, ppszDesc, pEntropy, pvRes, pPrompt, dwFlags, pDataOut)
+            args = [ctypes.byref(blob_in), None, None, None, None, 0,
+                    ctypes.byref(blob_out)]
+        if not fn(*args):
+            return None
+        try:
+            return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+    except Exception:
+        return None
+
+
+def _protect_key(key: bytes) -> "tuple[str, str]":
+    """격리 키를 보호해 (메타 필드명, hex 값) 으로 반환.
+
+    DPAPI 성공 시 ('key_dpapi', ...) — OS 보호. 실패/비윈도우 시 ('key', ...)
+    평문 폴백(보안 약함, 감사 로그에 표시)."""
+    protected = _dpapi(key, unprotect=False)
+    if protected is not None:
+        return "key_dpapi", protected.hex()
+    return "key", key.hex()
+
+
+def _recover_key(meta: dict) -> bytes:
+    """메타에서 격리 키를 복구. DPAPI 보호 키 우선, 없으면 평문 폴백."""
+    if meta.get("key_dpapi"):
+        raw = _dpapi(bytes.fromhex(meta["key_dpapi"]), unprotect=True)
+        if raw is None:
+            raise ValueError("DPAPI 복호화 실패(다른 사용자/PC에서 복원 시도?)")
+        return raw
+    return bytes.fromhex(meta["key"])
 
 # 기본 저장 위치(설정에서 변경 가능)
 SOLIGUARD_HOME = Path.home() / ".soliguard"
@@ -107,9 +169,9 @@ def quarantine_file(path: Path, info_type: str | None = None,
 
     info_type/severity 가 주어지면 격리함 화면(정본 14) 표시용으로 함께 저장한다.
 
-    주의: 데모에서는 복호화 키를 메타(.meta.json)에 함께 저장한다.
-    실제 제품에서는 키를 OS 보안 저장소(Windows DPAPI 등)에 분리 저장해야
-    한다 — 같은 폴더에 키를 두면 격리의 보안 의미가 사라진다.
+    복호화 키는 Windows DPAPI 로 현재 사용자 계정에 묶어 보호한다(_protect_key).
+    따라서 격리 폴더(.enc/.meta.json)만 탈취해도 다른 사용자/PC 에서는 복호화할
+    수 없다. 비윈도우 환경에서는 평문 키로 폴백한다(감사 로그 key_protected=False).
     """
     path = Path(path)
     try:
@@ -130,6 +192,7 @@ def quarantine_file(path: Path, info_type: str | None = None,
 
         qid = secrets.token_hex(8)
         (QUARANTINE_DIR / f"{qid}.enc").write_bytes(nonce + encrypted)
+        key_field, key_value = _protect_key(key)   # DPAPI 보호(가능 시)
         meta = {
             "id": qid,
             "original_path": str(path),
@@ -137,7 +200,7 @@ def quarantine_file(path: Path, info_type: str | None = None,
             "size": len(data),
             "info_type": info_type or "",
             "severity": severity or "",
-            "key": key.hex(),  # TODO(보안): OS 보안 저장소로 분리
+            key_field: key_value,
         }
         (QUARANTINE_DIR / f"{qid}.meta.json").write_text(
             json.dumps(meta, ensure_ascii=False), encoding="utf-8"
@@ -146,7 +209,8 @@ def quarantine_file(path: Path, info_type: str | None = None,
         _secure_overwrite(path)
         path.unlink()
 
-        write_audit("quarantine", str(path), "success", {"qid": qid})
+        write_audit("quarantine", str(path), "success",
+                    {"qid": qid, "key_protected": key_field == "key_dpapi"})
         return ActionResult("quarantine", str(path), "success", qid)
     except Exception as e:
         write_audit("quarantine", str(path), "failed", {"error": str(e)})
@@ -162,7 +226,7 @@ def restore_file(qid: str) -> ActionResult:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         blob = (QUARANTINE_DIR / f"{qid}.enc").read_bytes()
         nonce, encrypted = blob[:12], blob[12:]
-        aesgcm = AESGCM(bytes.fromhex(meta["key"]))
+        aesgcm = AESGCM(_recover_key(meta))
         data = aesgcm.decrypt(nonce, encrypted, None)
 
         target = Path(meta["original_path"])

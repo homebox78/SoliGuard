@@ -51,6 +51,33 @@ class RRNDetector(Detector):
         return f"{d[0:2]}****-{d[6]}******"
 
 
+class CorpRegDetector(Detector):
+    """법인등록번호(13자리). 사업자등록번호와 별개이며 자체 체크섬으로 검증.
+
+    형식이 주민등록번호와 같으므로 RRN 다음에 등록한다 — RRN 체크섬을 통과한
+    값은 RRN 으로 처리되고, 통과하지 못한 13자리만 이 검출기가 법인번호 체크섬으로
+    가린다(중복 카운트 없음)."""
+
+    name = "corp_reg"
+    info_type = "법인등록번호"
+    severity = Severity.HIGH
+    keep_unverified = False
+    field_keywords = ("법인", "법인등록", "법인번호", "corp", "corporate")
+
+    _pat = re.compile(r"(?<!\d)\d{6}-?\d{7}(?!\d)")
+
+    @property
+    def pattern(self) -> re.Pattern[str]:
+        return self._pat
+
+    def validate(self, raw: str) -> bool:
+        return V.validate_corp_reg(raw)
+
+    def mask(self, raw: str) -> str:
+        d = V.digits_only(raw)
+        return f"{d[0:6]}-*******"
+
+
 class CreditCardDetector(Detector):
     """신용카드 번호. Luhn 알고리즘 2차 검증."""
 
@@ -80,9 +107,10 @@ class BRNDetector(Detector):
     name = "brn"
     info_type = "사업자등록번호"
     severity = Severity.MEDIUM
-    field_keywords = ("사업자", "사업자등록", "brn", "법인")
+    field_keywords = ("사업자", "사업자등록", "brn")
 
-    _pat = re.compile(r"(?<!\d)\d{3}-?\d{2}-?\d{5}(?!\d)")
+    # 표준 3-2-5 형태 또는 구분자 없는 10자리만(임의 그룹핑 오인식 방지).
+    _pat = re.compile(r"(?<!\d)(?:\d{3}-\d{2}-\d{5}|\d{10})(?!\d)")
 
     @property
     def pattern(self) -> re.Pattern[str]:
@@ -168,12 +196,20 @@ class AccountDetector(Detector):
 
     def validate(self, raw: str) -> bool:
         d = V.digits_only(raw)
-        # 11~14자리만 계좌로 인정(10자리는 사업자번호·전화와 충돌해 제외)
-        return 11 <= len(d) <= 14 and len(set(d)) > 2
+        # 11~14자리 + 충분한 자릿수 다양성(사번·일련번호 등 오탐 억제)
+        return 11 <= len(d) <= 14 and len(set(d)) >= 4
 
     def mask(self, raw: str) -> str:
+        # 구분자(하이픈 등)는 보존하고 끝 4자리만 노출, 나머지 숫자는 가린다.
         d = V.digits_only(raw)
-        return "*" * (len(d) - 4) + d[-4:]
+        masked = "*" * (len(d) - 4) + d[-4:]
+        out, i = [], 0
+        for ch in raw.strip():
+            if ch.isdigit():
+                out.append(masked[i]); i += 1
+            else:
+                out.append(ch)
+        return "".join(out)
 
 
 class PassportDetector(Detector):
@@ -195,8 +231,9 @@ class PassportDetector(Detector):
         return V.validate_passport(raw)
 
     def mask(self, raw: str) -> str:
+        # 앞 3자(기호+2자리)만 노출, 나머지는 원문 길이에 맞춰 가린다.
         s = raw.strip()
-        return f"{s[0]}{s[1:3]}*****"
+        return s[:3] + "*" * max(1, len(s) - 3)
 
 
 class DriverLicenseDetector(Detector):
@@ -316,6 +353,37 @@ class SecretDetector(Detector):
             re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"),
             value_group=None,
         ),
+        # 접두사가 뚜렷한 글로벌 서비스 토큰 — 오탐이 거의 없어 엔트로피 불필요.
+        SecretRule(
+            "github_token", "GitHub 토큰",
+            re.compile(r"(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{36,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "slack_token", "Slack 토큰",
+            re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "google_api_key", "Google API 키",
+            re.compile(r"(?<![A-Za-z0-9])AIza[0-9A-Za-z_\-]{35}(?![A-Za-z0-9])"),
+            value_group=None,
+        ),
+        SecretRule(
+            "stripe_key", "Stripe 키",
+            re.compile(r"(?<![A-Za-z0-9])(?:sk|rk)_live_[0-9A-Za-z]{20,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "npm_token", "npm 토큰",
+            re.compile(r"(?<![A-Za-z0-9])npm_[A-Za-z0-9]{36}(?![A-Za-z0-9])"),
+            value_group=None,
+        ),
+        SecretRule(
+            "jwt", "JWT 토큰",
+            re.compile(r"eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"),
+            value_group=None,
+        ),
         SecretRule(
             "db_url",
             "DB 접속정보",
@@ -393,11 +461,13 @@ class SecretDetector(Detector):
 #: 엔진이 기본 등록하는 검출기 목록(순서 = 스팬 중복 시 우선순위)
 DEFAULT_DETECTORS: tuple[type[Detector], ...] = (
     RRNDetector,            # 주민/외국인등록번호
+    CorpRegDetector,        # 법인등록번호(RRN 다음 — 형식 동일, 체크섬으로 분리)
     BRNDetector,            # 사업자등록번호
     CreditCardDetector,     # 신용카드
+    SecretDetector,         # API 키/시크릿/토큰(개발자) — 토큰 내부 숫자열이
+                            # 운전면허·계좌로 오인식되지 않도록 숫자 검출기보다 앞
     PassportDetector,       # 여권번호
     DriverLicenseDetector,  # 운전면허(계좌보다 우선해 12자리 오인식 방지)
-    SecretDetector,         # API 키/시크릿(개발자)
     PhoneDetector,          # 전화번호(계좌보다 우선)
     AccountDetector,        # 계좌번호
     IPDetector,             # IP 주소(개발자)
