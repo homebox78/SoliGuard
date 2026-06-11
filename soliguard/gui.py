@@ -2149,6 +2149,7 @@ class MainWindow(QMainWindow):
         self._settings_tabs = {}
         for key, label, ic in [("general", "일반", "settings"), ("scan", "스캔", "search"),
                                ("auto", "자동 점검", "clock"), ("security", "보안", "shield"),
+                               ("whitelist", "오탐 제외", "eyeOff"),
                                ("about", "정보", "fileText")]:
             b = QPushButton("  " + label)
             b.setObjectName("Nav")
@@ -2166,6 +2167,7 @@ class MainWindow(QMainWindow):
         self.settings_stack.addWidget(self._settings_scan())
         self.settings_stack.addWidget(self._settings_auto())
         self.settings_stack.addWidget(self._settings_security())
+        self.settings_stack.addWidget(self._settings_whitelist())
         self.settings_stack.addWidget(self._settings_about())
         body.addWidget(self.settings_stack, 1)
         lay.addLayout(body, 1)
@@ -2340,6 +2342,105 @@ class MainWindow(QMainWindow):
         gl.addStretch()
         return self._tab_wrap(c)
 
+    def _settings_whitelist(self) -> QWidget:
+        """오탐 제외(화이트리스트) 관리 — 조회/추가/삭제(즉시 저장)."""
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(22, 20, 22, 20)
+        gl.setSpacing(12)
+        t = QLabel("오탐 제외 (화이트리스트)")
+        t.setStyleSheet("font-size:15px; font-weight:800;")
+        gl.addWidget(t)
+        d = QLabel("여기에 등록한 값은 다음 점검부터 검출에서 제외됩니다. "
+                   "검출 결과의 '이건 오탐이에요'로도 추가됩니다.")
+        d.setWordWrap(True)
+        d.setStyleSheet("color:#565E6C; font-size:12.5px;")
+        gl.addWidget(d)
+
+        addrow = QHBoxLayout(); addrow.setSpacing(8)
+        self._wl_input = QLineEdit()
+        self._wl_input.setPlaceholderText("제외할 값 입력 (예: 010-1234-5678)")
+        self._wl_input.returnPressed.connect(self._wl_add)
+        addrow.addWidget(self._wl_input, 1)
+        addb = QPushButton("  추가"); addb.setObjectName("Ghost")
+        addb.setIcon(QIcon(icons.line_icon("plus", 15, "#565E6C")))
+        addb.setCursor(Qt.PointingHandCursor)
+        addb.clicked.connect(self._wl_add)
+        addrow.addWidget(addb)
+        gl.addLayout(addrow)
+
+        self._wl_scroll = QScrollArea(); self._wl_scroll.setWidgetResizable(True)
+        self._wl_scroll.setFrameShape(QFrame.NoFrame)
+        self._wl_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        host = QWidget(); self._wl_list = QVBoxLayout(host)
+        self._wl_list.setContentsMargins(0, 0, 0, 0); self._wl_list.setSpacing(6)
+        self._wl_list.addStretch()
+        self._wl_scroll.setWidget(host)
+        gl.addWidget(self._wl_scroll, 1)
+        self._wl_empty = QLabel("등록된 제외 값이 없습니다.")
+        self._wl_empty.setStyleSheet("color:#8B92A0; font-size:12px; padding:8px 2px;")
+        gl.addWidget(self._wl_empty)
+        self._wl_refresh()
+
+        w = QWidget(); v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(c)
+        return w
+
+    def _wl_refresh(self):
+        if not hasattr(self, "_wl_list"):
+            return
+        wl = list(getattr(self.cfg, "whitelist", []) or [])
+        while self._wl_list.count() > 1:
+            it = self._wl_list.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        for val in wl:
+            row = QFrame(); row.setObjectName("WlRow")
+            row.setStyleSheet("QFrame#WlRow{background:#F7F8FA;border:1px solid #E7E9EE;"
+                              "border-radius:8px;}")
+            rl = QHBoxLayout(row); rl.setContentsMargins(12, 7, 8, 7); rl.setSpacing(8)
+            lab = QLabel(val); lab.setStyleSheet("font-size:12.5px;")
+            rl.addWidget(lab, 1)
+            rm = QPushButton(); rm.setObjectName("IconBtn"); rm.setFixedSize(28, 28)
+            rm.setIcon(QIcon(icons.line_icon("trash", 15, "#B0123F")))
+            rm.setCursor(Qt.PointingHandCursor)
+            rm.setStyleSheet("QPushButton#IconBtn{background:transparent;border:none;"
+                             "border-radius:7px;}QPushButton#IconBtn:hover{background:#FDEAEA;}")
+            rm.clicked.connect(lambda _=False, v=val: self._wl_remove(v))
+            rl.addWidget(rm)
+            self._wl_list.insertWidget(self._wl_list.count() - 1, row)
+        self._wl_empty.setVisible(not wl)
+        self._wl_scroll.setVisible(bool(wl))
+
+    def _wl_save(self, wl: list):
+        from .config import AppConfig
+        cfg = self.cfg or AppConfig.load()
+        cfg.whitelist = wl
+        cfg.save()
+        self.cfg = cfg
+
+    def _wl_add(self):
+        val = self._wl_input.text().strip()
+        if not val:
+            return
+        wl = list(getattr(self.cfg, "whitelist", []) or [])
+        if val in wl:
+            self._wl_input.clear()
+            self._warn("중복", "이미 등록된 값입니다.")
+            return
+        wl.append(val)
+        self._wl_save(wl)
+        self._wl_input.clear()
+        self._wl_refresh()
+        self._toast("제외 목록에 추가했습니다.")
+
+    def _wl_remove(self, val: str):
+        wl = [x for x in (getattr(self.cfg, "whitelist", []) or []) if x != val]
+        self._wl_save(wl)
+        self._wl_refresh()
+        self._toast("제외 목록에서 제거했습니다.")
+
     def _tab_wrap(self, card) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
@@ -2362,7 +2463,7 @@ class MainWindow(QMainWindow):
         return ln
 
     def _set_settings_tab(self, key: str):
-        order = ["general", "scan", "auto", "security", "about"]
+        order = ["general", "scan", "auto", "security", "whitelist", "about"]
         self.settings_stack.setCurrentIndex(order.index(key))
         for k, b in self._settings_tabs.items():
             b.setChecked(k == key)
@@ -3121,6 +3222,7 @@ class MainWindow(QMainWindow):
         cfg.whitelist = wl
         cfg.save()
         self.cfg = cfg
+        self._wl_refresh()  # 설정의 오탐 제외 목록과 동기화
         self._success("오탐 등록",
                       f"{added}건을 오탐(제외)으로 등록했습니다. 다음 점검부터 제외됩니다.")
 
