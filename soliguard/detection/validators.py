@@ -19,6 +19,7 @@ __all__ = [
     "validate_foreigner_rrn",
     "rrn_is_foreigner",
     "luhn_valid",
+    "validate_credit_card",
     "validate_brn",
     "validate_passport",
     "validate_driver_license",
@@ -128,6 +129,29 @@ def luhn_valid(text: str) -> bool:
                 n -= 9
         total += n
     return total % 10 == 0
+
+
+def validate_credit_card(text: str) -> bool:
+    """신용카드 검증 = Luhn + 브랜드 IIN(시작번호)·길이 규칙.
+
+    Luhn만으로는 IMEI(15자리)·임의의 13/16자리 숫자가 다수 통과해 오탐이 크다.
+    실제 카드 브랜드의 시작번호와 길이 조합을 함께 확인해 오탐을 줄인다."""
+    d = digits_only(text)
+    n = len(d)
+    if n not in (13, 14, 15, 16, 19):
+        return False
+    if not luhn_valid(d):
+        return False
+    p1, p2, p3 = d[0], d[:2], d[:3]
+    if n == 15:
+        return p2 in ("34", "37")                       # Amex
+    if n == 14:
+        return p2 in ("36", "38") or p3 in (
+            "300", "301", "302", "303", "304", "305", "309")  # Diners
+    if n == 13:
+        return p1 == "4"                                # Visa(구형 13자리)
+    # 16 / 19자리: Visa(4)·Mastercard(5)·Amex계열/JCB/Diners(3)·Discover(6)
+    return p1 in ("3", "4", "5", "6")
 
 
 # 사업자등록번호 체크섬 가중치(앞 9자리에 적용)

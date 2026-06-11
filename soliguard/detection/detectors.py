@@ -67,7 +67,7 @@ class CreditCardDetector(Detector):
         return self._pat
 
     def validate(self, raw: str) -> bool:
-        return V.luhn_valid(raw)
+        return V.validate_credit_card(raw)
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
