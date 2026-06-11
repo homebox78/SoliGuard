@@ -127,6 +127,10 @@ class DetectionEngine:
                         # 라벨이 유형을 확증 → 강등됐던 위험도를 원복
                         finding = replace(finding, severity=det.severity)
 
+                # 문맥 의존형 유형(여권/면허 등): 필드 라벨이 있으면 승격
+                if in_field and det.field_severity is not None:
+                    finding = replace(finding, severity=det.field_severity)
+
                 if label:
                     finding = replace(finding, field=label)
                 raw_findings.append(finding)
@@ -135,7 +139,27 @@ class DetectionEngine:
         resolved.sort(
             key=lambda f: (_SEVERITY_ORDER[f.severity], f.line, f.start)
         )
-        return resolved
+        return self._sanitize_contexts(resolved)
+
+    @staticmethod
+    def _sanitize_contexts(findings: list[Finding]) -> list[Finding]:
+        """각 Finding.context 안에 들어간 '다른 검출값'의 원문을 모두 마스킹한다.
+
+        미리보기/리포트의 '검출 위치'는 주변 문맥을 보여주는데, 인접한 다른
+        개인정보가 평문으로 새는 것을 막는다(화면설계서 #3: 항상 마스킹)."""
+        pairs = sorted(
+            {(f.raw, f.masked) for f in findings if f.raw},
+            key=lambda p: len(p[0]), reverse=True,  # 긴 원문부터 치환(부분 겹침 방지)
+        )
+        out: list[Finding] = []
+        for f in findings:
+            ctx = f.context
+            if ctx:
+                for raw, masked in pairs:
+                    if raw in ctx:
+                        ctx = ctx.replace(raw, masked)
+            out.append(replace(f, context=ctx) if ctx != f.context else f)
+        return out
 
     @staticmethod
     def _field_of(finding: Finding, spans: Sequence[FieldSpan]) -> str:

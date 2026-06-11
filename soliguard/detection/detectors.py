@@ -177,11 +177,15 @@ class AccountDetector(Detector):
 
 
 class PassportDetector(Detector):
-    """여권번호. 발급기호(영문 1자) + 숫자 8자리 형식·기호 검증."""
+    """여권번호. 발급기호(영문 1자) + 숫자 8자리 형식·기호 검증.
+
+    영문1+숫자8 형식은 주문/제품 코드와 겹치는 오탐 위험이 있어, 자유 텍스트에서는
+    MEDIUM으로 두고 '여권' 열/키에 있을 때만 HIGH로 승격한다."""
 
     name = "passport"
     info_type = "여권번호"
-    severity = Severity.HIGH
+    severity = Severity.MEDIUM
+    field_severity = Severity.HIGH
     field_keywords = ("여권", "passport", "passportno")
 
     # 영문 1자 + 숫자 8자(구권/전자여권). 앞뒤 영숫자 경계로 토큰 분리.
@@ -200,21 +204,28 @@ class PassportDetector(Detector):
 
 
 class DriverLicenseDetector(Detector):
-    """운전면허번호. 지역코드(2)-연도(2)-일련(6)-검증(2) 형식·지역 검증."""
+    """운전면허번호. 지역코드(2)-연도(2)-일련(6)-검증(2) 형식·지역 검증.
+
+    구분자 없는 순수 12자리는 주문번호 등과 겹쳐 오탐이 많으므로 약후보(PATTERN_ONLY)로
+    두고 '면허' 열/키에 있을 때만 구제·승격한다. 구분자(하이픈/공백)가 있으면 검증 통과."""
 
     name = "driver_license"
     info_type = "운전면허번호"
-    severity = Severity.HIGH
+    severity = Severity.MEDIUM
+    field_severity = Severity.HIGH
     field_keywords = ("운전면허", "면허번호", "면허", "license", "driver")
 
-    _pat = re.compile(r"(?<!\d)\d{2}-?\d{2}-?\d{6}-?\d{2}(?!\d)")
+    _pat = re.compile(r"(?<!\d)\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}(?!\d)")
 
     @property
     def pattern(self) -> re.Pattern[str]:
         return self._pat
 
     def validate(self, raw: str) -> bool:
-        return V.validate_driver_license(raw)
+        # 형식·지역코드 + 구분자(하이픈/공백) 존재까지 충족해야 검증 통과.
+        # 순수 12자리는 약후보로 남겨 자유 텍스트 오탐을 차단한다.
+        has_sep = "-" in raw or " " in raw
+        return has_sep and V.validate_driver_license(raw)
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
@@ -230,7 +241,8 @@ class IPDetector(Detector):
     default_roles = frozenset({ROLE_DEVELOPER})
     field_keywords = ("ip", "아이피", "ipaddr", "host", "서버")
 
-    _pat = re.compile(r"(?<![\d.])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\d.])")
+    # 앞에 v/V(버전 문자열 v1.2.3.4)나 숫자·점이 오면 제외
+    _pat = re.compile(r"(?<![\d.vV])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\d.])")
 
     @property
     def pattern(self) -> re.Pattern[str]:

@@ -188,9 +188,7 @@ def validate_driver_license(text: str) -> bool:
         return False
     if d[0:2] not in _DL_REGIONS:
         return False
-    year2 = int(d[2:4])  # 발급(취득) 연도 두 자리: 00~99 모두 허용
-    if year2 > 99:
-        return False
+    # 발급(취득) 연도 두 자리는 00~99 모두 허용(별도 검사 불필요).
     return len(set(d)) > 2
 
 
