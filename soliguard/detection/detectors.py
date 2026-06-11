@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from . import validators as V
-from .base import Confidence, Detector, Finding, LineIndex, Severity
+from .base import Confidence, Detector, Finding, LineIndex, Severity, _context
 
 # 직무 식별자 상수
 ROLE_DEVELOPER = "developer"
@@ -162,14 +162,45 @@ class AccountDetector(Detector):
     # 3그룹(하이픈 2개) 형태만, 첫 그룹 2~4자리(은행 계좌 형태)
     _pat = re.compile(r"(?<![\d-])\d{2,4}-\d{2,6}-\d{2,6}(?:-\d{1,6})?(?![\d-])")
 
+    # 주요 한국 은행/금융기관 명칭 — 주변 문맥에 있으면 계좌로 확정(오탐 감소)
+    _BANKS = (
+        "은행", "bank", "국민", "kb", "신한", "우리", "하나", "농협", "nh", "기업",
+        "ibk", "수협", "대구", "부산", "경남", "광주", "전북", "제주", "새마을",
+        "신협", "우체국", "산업", "kdb", "씨티", "citi", "sc제일", "카카오뱅크",
+        "카카오", "케이뱅크", "토스", "저축은행", "예금", "입금", "송금", "이체",
+    )
+
     @property
     def pattern(self) -> re.Pattern[str]:
         return self._pat
 
-    def validate(self, raw: str) -> bool:
-        d = V.digits_only(raw)
-        # 11~14자리만 계좌로 인정(10자리는 사업자번호·전화와 충돌해 제외)
-        return 11 <= len(d) <= 14 and len(set(d)) > 2
+    def detect(self, text: str, line_index: LineIndex):
+        """계좌 형식 + 주변 문맥(은행명/계좌 키워드)까지 있어야 검증 통과로 본다.
+
+        문맥이 없으면 약후보(PATTERN_ONLY)로 내보내, 자유 텍스트의 임의 하이픈
+        숫자(추적/정산코드 등) 오탐을 막는다. '계좌' 열/키에 있으면 엔진이 구제한다."""
+        ctx_keys = self._BANKS + self.field_keywords
+        for m in self.pattern.finditer(text):
+            raw = m.group(0)
+            d = V.digits_only(raw)
+            start, end = m.start(), m.end()
+            base_ok = 11 <= len(d) <= 14 and len(set(d)) > 2
+            window = _context(text, start, end).lower()
+            has_ctx = any(k in window for k in ctx_keys)
+            verified = base_ok and has_ctx
+            yield Finding(
+                detector=self.name,
+                info_type=self.info_type,
+                severity=self.severity,
+                confidence=Confidence.VERIFIED if verified else Confidence.PATTERN_ONLY,
+                raw=raw,
+                masked=self.mask(raw),
+                start=start,
+                end=end,
+                line=line_index.line_of(start),
+                context=_context(text, start, end),
+                weak=not verified,
+            )
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
