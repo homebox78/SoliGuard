@@ -40,8 +40,11 @@ PROFILE_ICON = {
 # 직무별 우선 스캔 대상 확장자
 PROFILE_EXTENSIONS = {
     "개발자": {
-        ".py", ".java", ".js", ".sql", ".yml", ".yaml", ".env",
-        ".properties", ".json", ".log", ".txt", ".csv", ".xlsx", ".docx", ".pdf",
+        ".py", ".java", ".js", ".ts", ".go", ".php", ".rb", ".cs",
+        ".yml", ".yaml", ".env", ".properties", ".json", ".jsonl",
+        ".log", ".txt", ".csv", ".tsv", ".xlsx", ".docx", ".pdf",
+        # 백업된 고객 데이터(SI 개발자 PC) — SQL 덤프·DB 파일
+        ".sql", ".ddl", ".dump", ".bak", ".db", ".sqlite", ".sqlite3",
     },
     "디자이너": {
         ".psd", ".psb", ".xd",                          # 디자인 원본
@@ -50,7 +53,8 @@ PROFILE_EXTENSIONS = {
     },
     "기획자": {".docx", ".hwp", ".hwpx", ".xlsx", ".csv", ".pdf", ".txt"},
     "PM": {".docx", ".hwp", ".hwpx", ".xlsx", ".csv", ".pdf", ".txt"},
-    "전산사무": {".xlsx", ".csv", ".docx", ".hwp", ".hwpx", ".pdf", ".txt"},
+    "전산사무": {".xlsx", ".csv", ".tsv", ".docx", ".hwp", ".hwpx", ".pdf",
+                ".txt", ".sql", ".db", ".sqlite"},
 }
 
 # 직무별 권장 스캔 폴더(온보딩 기본 추천)

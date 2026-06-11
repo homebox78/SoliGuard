@@ -72,20 +72,29 @@ class _DocBuilder:
 
 
 SUPPORTED_TEXT = {
-    ".txt", ".csv", ".log", ".json", ".xml", ".md", ".py", ".java", ".js",
-    ".ts", ".kt", ".go", ".sql", ".yml", ".yaml", ".ini", ".cfg",
-    ".properties", ".env", ".html", ".sh", ".bat", ".ps1",
+    # 문서/로그/설정
+    ".txt", ".csv", ".tsv", ".log", ".json", ".jsonl", ".ndjson", ".xml",
+    ".md", ".yml", ".yaml", ".ini", ".cfg", ".conf", ".toml",
+    ".properties", ".env", ".html", ".htm",
+    # 소스코드(SI 개발자 산출물)
+    ".py", ".java", ".js", ".ts", ".tsx", ".jsx", ".kt", ".go", ".c", ".cpp",
+    ".h", ".hpp", ".cs", ".php", ".rb", ".rs", ".swift", ".scala", ".pl", ".r",
+    ".sh", ".bat", ".ps1",
+    # DB/백업 — 텍스트 덤프(SQL 스크립트, mysqldump/pg_dump 등)
+    ".sql", ".ddl", ".dump", ".bak",
 }
 SUPPORTED_OFFICE = {".xlsx", ".xls", ".docx"}
 SUPPORTED_HWP = {".hwp", ".hwpx"}
 SUPPORTED_PDF = {".pdf"}
 SUPPORTED_IMAGE = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+# DB 파일(백업된 고객 데이터) — SQLite 바이너리. SI 개발자 PC 대응.
+SUPPORTED_DB = {".db", ".sqlite", ".sqlite3", ".db3"}
 # 디자인 파일(디자이너 직무). 실제 추출은 design_extractors 가 담당.
 SUPPORTED_DESIGN = {".psd", ".psb", ".xd"}
 
 _ALL_SUPPORTED = (
     SUPPORTED_TEXT | SUPPORTED_OFFICE | SUPPORTED_HWP | SUPPORTED_PDF
-    | SUPPORTED_IMAGE | SUPPORTED_DESIGN
+    | SUPPORTED_IMAGE | SUPPORTED_DB | SUPPORTED_DESIGN
 )
 
 
@@ -112,6 +121,8 @@ def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
             return _extract_hwp_ole(path)
         if ext == ".pdf":
             return _extract_pdf(path, ocr_enabled)
+        if ext in SUPPORTED_DB:
+            return _extract_sqlite(path)
         if ext in SUPPORTED_IMAGE:
             return _extract_image(path) if ocr_enabled else ""
         if ext in SUPPORTED_DESIGN:
@@ -135,12 +146,16 @@ def extract_doc(path: str | Path, ocr_enabled: bool = True) -> ExtractedDoc:
     try:
         if ext == ".csv":
             return _doc_csv(path)
+        if ext == ".tsv":
+            return _doc_csv(path, delimiter="\t")
         if ext == ".json":
             return _doc_json(path)
         if ext == ".xlsx":
             return _doc_xlsx(path)
         if ext == ".xls":
             return _doc_xls(path)
+        if ext in SUPPORTED_DB:
+            return _doc_sqlite(path)
     except ExtractionError:
         raise
     except Exception:
@@ -152,13 +167,13 @@ def extract_doc(path: str | Path, ocr_enabled: bool = True) -> ExtractedDoc:
 # ---------------------------------------------------------------------------
 # 구조 인식 추출 (표/JSON) — 필드 라벨 부착
 # ---------------------------------------------------------------------------
-def _doc_csv(path: Path) -> ExtractedDoc:
-    """CSV: 첫 비어있지 않은 행을 헤더로 삼아 각 셀에 컬럼 라벨을 부여."""
+def _doc_csv(path: Path, delimiter: str = ",") -> ExtractedDoc:
+    """CSV/TSV: 첫 비어있지 않은 행을 헤더로 삼아 각 셀에 컬럼 라벨을 부여."""
     raw = path.read_bytes()
     if not raw:
         return ExtractedDoc("", [])
     text = _decode_bytes(raw)
-    reader = csv.reader(io.StringIO(text))
+    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     rows = [r for r in reader]
     header: list[str] = []
     b = _DocBuilder()
@@ -243,6 +258,77 @@ def _doc_xls(path: Path) -> ExtractedDoc:
             for i, c in enumerate(cells):
                 label = header[i] if i < len(header) else ""
                 b.add(c, label)
+    return b.build()
+
+
+# ---------------------------------------------------------------------------
+# DB 파일(백업된 고객 데이터) — SQLite. SI 개발자 PC의 .db/.sqlite 대응.
+# ---------------------------------------------------------------------------
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+_DB_ROW_LIMIT = 50000           # 테이블당 최대 행(과도한 메모리 방지)
+
+
+def _is_sqlite(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(16) == _SQLITE_MAGIC
+    except OSError:
+        return False
+
+
+def _sqlite_tables(cur) -> list[str]:
+    return [r[0] for r in cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%'")]
+
+
+def _extract_sqlite(path: Path) -> str:
+    """SQLite DB의 모든 테이블 텍스트 셀을 추출. SQLite가 아니면 평문 폴백."""
+    if not _is_sqlite(path):
+        return _extract_plain(path)   # .db 가 텍스트일 수도 있음
+    import sqlite3
+    parts: list[str] = []
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        cur = conn.cursor()
+        for t in _sqlite_tables(cur):
+            try:
+                rows = cur.execute(
+                    f'SELECT * FROM "{t}" LIMIT {_DB_ROW_LIMIT}').fetchall()
+            except sqlite3.Error:
+                continue
+            for row in rows:
+                cells = [str(c) for c in row
+                         if c is not None and not isinstance(c, (bytes, bytearray))]
+                if cells:
+                    parts.append(" ".join(cells))
+    finally:
+        conn.close()
+    return "\n".join(parts)
+
+
+def _doc_sqlite(path: Path) -> ExtractedDoc:
+    """SQLite DB를 컬럼명 라벨과 함께 구조 추출(예: 'rrn'/'phone' 컬럼 → 필드 구제)."""
+    if not _is_sqlite(path):
+        return ExtractedDoc(_extract_plain(path), [])
+    import sqlite3
+    b = _DocBuilder()
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        cur = conn.cursor()
+        for t in _sqlite_tables(cur):
+            try:
+                cur.execute(f'SELECT * FROM "{t}" LIMIT {_DB_ROW_LIMIT}')
+            except sqlite3.Error:
+                continue
+            cols = [d[0] for d in (cur.description or [])]
+            for row in cur.fetchall():
+                for i, c in enumerate(row):
+                    if c is None or isinstance(c, (bytes, bytearray)):
+                        continue
+                    b.add(c, cols[i] if i < len(cols) else "")
+    finally:
+        conn.close()
     return b.build()
 
 
