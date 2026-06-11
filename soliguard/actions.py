@@ -14,21 +14,23 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from .extractors import _decode_bytes
+from .paths import APP_DIR, AUDIT_DB, AUDIT_LOG_LEGACY, QUARANTINE_DIR
 
-# 기본 저장 위치(설정에서 변경 가능)
-SOLIGUARD_HOME = Path.home() / ".soliguard"
-QUARANTINE_DIR = SOLIGUARD_HOME / "quarantine"
-AUDIT_LOG = SOLIGUARD_HOME / "audit.log"
+# 하위호환 별칭(기존 참조 보호)
+SOLIGUARD_HOME = APP_DIR
+AUDIT_LOG = AUDIT_LOG_LEGACY
 
 __all__ = [
     "ActionResult",
     "write_audit",
+    "read_audit",
     "mask_in_text_file",
     "quarantine_file",
     "restore_file",
@@ -45,23 +47,105 @@ class ActionResult:
 
 
 # ---------------------------------------------------------------------------
-# 감사 로그 (컴플라이언스 증빙)
+# 감사 로그 (컴플라이언스 증빙) — SQLite 영구 저장 + 조회
 # ---------------------------------------------------------------------------
+_BASE_COLS = {"ts", "action", "path", "result", "user"}
+_legacy_migrated = False
+
+
+def _connect() -> sqlite3.Connection:
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(AUDIT_DB)
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS audit(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL, action TEXT NOT NULL, path TEXT,
+            result TEXT, user TEXT, detail TEXT)"""
+    )
+    _migrate_legacy(conn)
+    return conn
+
+
+def _migrate_legacy(conn: sqlite3.Connection) -> None:
+    """구형 append 로그(audit.log)가 있으면 DB로 1회 이관."""
+    global _legacy_migrated
+    if _legacy_migrated:
+        return
+    _legacy_migrated = True
+    if not AUDIT_LOG_LEGACY.exists():
+        return
+    if conn.execute("SELECT COUNT(*) FROM audit").fetchone()[0] > 0:
+        return  # 이미 DB에 데이터가 있으면 중복 이관 안 함
+    rows = []
+    for line in AUDIT_LOG_LEGACY.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        detail = {k: v for k, v in r.items() if k not in _BASE_COLS}
+        rows.append((
+            r.get("ts", ""), r.get("action", ""), r.get("path", ""),
+            r.get("result", ""), r.get("user", ""),
+            json.dumps(detail, ensure_ascii=False) if detail else "",
+        ))
+    if rows:
+        conn.executemany(
+            "INSERT INTO audit(ts,action,path,result,user,detail) "
+            "VALUES(?,?,?,?,?,?)", rows)
+        conn.commit()
+    try:  # 재이관 방지용으로 원본 보존 후 이름 변경
+        AUDIT_LOG_LEGACY.rename(AUDIT_LOG_LEGACY.with_suffix(".log.imported"))
+    except OSError:
+        pass
+
+
 def write_audit(
     action: str, path: str, result: str, extra: dict | None = None
 ) -> None:
-    """모든 조치를 추가 전용(append-only) 로그로 기록."""
-    AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
-    record = {
-        "ts": datetime.now().isoformat(timespec="seconds"),
-        "action": action,
-        "path": path,
-        "result": result,
-        "user": os.getenv("USERNAME") or os.getenv("USER") or "unknown",
-        **(extra or {}),
-    }
-    with open(AUDIT_LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    """모든 조치를 SQLite 감사 로그에 기록(실패해도 조치는 막지 않음)."""
+    try:
+        conn = _connect()
+        user = os.getenv("USERNAME") or os.getenv("USER") or "unknown"
+        conn.execute(
+            "INSERT INTO audit(ts,action,path,result,user,detail) "
+            "VALUES(?,?,?,?,?,?)",
+            (datetime.now().isoformat(timespec="seconds"), action, path,
+             result, user, json.dumps(extra, ensure_ascii=False) if extra else ""),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def read_audit(limit: int = 500, action: str | None = None) -> list[dict]:
+    """감사 로그를 최신순으로 조회(필요 시 action 종류로 필터)."""
+    try:
+        conn = _connect()
+        q = "SELECT ts,action,path,result,user,detail FROM audit"
+        args: list = []
+        if action:
+            q += " WHERE action=?"
+            args.append(action)
+        q += " ORDER BY id DESC LIMIT ?"
+        args.append(limit)
+        rows = conn.execute(q, args).fetchall()
+        conn.close()
+    except Exception:
+        return []
+    out: list[dict] = []
+    for ts, act, p, res, usr, detail in rows:
+        rec = {"ts": ts, "action": act, "path": p, "result": res, "user": usr}
+        if detail:
+            try:
+                rec.update(json.loads(detail))
+            except json.JSONDecodeError:
+                pass
+        out.append(rec)
+    return out  # 최신순
 
 
 # ---------------------------------------------------------------------------

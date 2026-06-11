@@ -2378,15 +2378,15 @@ class MainWindow(QMainWindow):
             b.setStyleSheet(_seg_btn_qss(on))
 
     def _export_audit(self):
-        from . import actions
-        if not actions.AUDIT_LOG.exists():
+        rows0 = _read_audit_tail(100000)
+        if not rows0:
             self._notice("감사 로그", "아직 기록이 없습니다.")
             return
         path, _ = QFileDialog.getSaveFileName(self, "감사 로그 내보내기", "audit.csv", "CSV (*.csv)")
         if not path:
             return
         import csv
-        rows = _read_audit_tail(100000)
+        rows = rows0
         try:
             with open(path, "w", encoding="utf-8-sig", newline="") as f:
                 wr = csv.writer(f)
@@ -3191,18 +3191,10 @@ class MainWindow(QMainWindow):
 
 
 def _read_audit_tail(n: int) -> list:
+    """감사 로그 마지막 n건을 오래된→최신 순으로(기존 호출부 호환)."""
     try:
         from . import actions
-        if not actions.AUDIT_LOG.exists():
-            return []
-        lines = actions.AUDIT_LOG.read_text(encoding="utf-8").strip().splitlines()
-        out = []
-        for line in lines[-n:]:
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-        return out
+        return list(reversed(actions.read_audit(limit=n)))  # 최신순 → 오래된순
     except Exception:
         return []
 
