@@ -2661,25 +2661,49 @@ class MainWindow(QMainWindow):
         self.sc_sub.setText(
             f"직무 “{', '.join(self.profiles)}” 프로파일 기준으로 기본값이 채워졌어요. "
             "그대로 시작해도 됩니다.")
-        # 추천 폴더 구성
+        # 추천 폴더 구성 — 실제 존재하는 폴더만 노출(없는 폴더는 숨김)
         from .profiles import PROFILE_FOLDERS
-        names, seen = [], set()
-        for role in self.profiles:
-            for n in PROFILE_FOLDERS.get(role, []):
-                if n not in seen:
-                    seen.add(n); names.append(n)
         home = Path.home()
+        std = ["Downloads", "Desktop", "Documents", "Pictures"]   # 표준 사용자 폴더
+        rec = [n for role in self.profiles for n in PROFILE_FOLDERS.get(role, [])]
+        candidates: list[str] = []
+        seen: set[str] = set()
+
+        def _add_cand(p: Path):
+            try:
+                if not (p.exists() and p.is_dir()):
+                    return
+                rp = str(p)
+            except OSError:
+                return
+            key = rp.lower()
+            if key not in seen:
+                seen.add(key); candidates.append(rp)
+
+        for n in std + rec:
+            _add_cand(home / n)
+        for od in (home / "OneDrive", home / "OneDrive - Personal"):
+            _add_cand(od)
+        prev = [str(Path(p)) for p in (getattr(self.cfg, "target_folders", []) or [])]
+        for p in prev:
+            _add_cand(Path(p))
+
+        prev_set = {p.lower() for p in prev}
+        rec_paths = {str(home / n).lower() for n in rec}
         self._sc_folders = []
         while self.sc_folder_box.count():
             it = self.sc_folder_box.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        for idx, n in enumerate(names):
-            p = home / n
-            on = p.exists() and (scope != "quick" or idx < 2)
-            self._add_folder_row(str(p), on)
-        # 전체 드라이브 옵션(정본 04)
-        self._add_folder_row("전체 드라이브 (C:\\)", False)
+        for idx, rp in enumerate(candidates):
+            if prev_set:                       # 이전에 고른 폴더가 있으면 그대로 복원
+                on = rp.lower() in prev_set
+            else:                              # 없으면 직무 추천 폴더를 기본 선택
+                on = rp.lower() in rec_paths and (scope != "quick" or idx < 2)
+            self._add_folder_row(rp, on)
+        # 전체 드라이브 옵션(실제 스캔 경로는 C:\)
+        self._add_folder_row("C:\\", "C:\\".lower() in prev_set,
+                             label="전체 드라이브 (C:\\)")
         self._refresh_folder_count()
         # 검출 항목(직무 기반) — 크림슨 pill 칩
         kinds = ["주민등록번호", "신용카드", "전화·이메일", "계좌번호", "사업자번호"]
@@ -2750,7 +2774,7 @@ class MainWindow(QMainWindow):
         n = sum(1 for b, _ in self._sc_folders if b.isChecked())
         self.sc_folder_count.setText(f"{n}곳 선택")
 
-    def _add_folder_row(self, path: str, on: bool):
+    def _add_folder_row(self, path: str, on: bool, label: str | None = None):
         b = QPushButton()
         b.setObjectName("ChkCardG")
         b.setCheckable(True)
@@ -2768,7 +2792,7 @@ class MainWindow(QMainWindow):
         fic = QLabel(); fic.setPixmap(icons.line_icon("folder", 16, "#565E6C", 2))
         fic.setFixedSize(16, 16)
         h.addWidget(fic)
-        pl = QLabel(path)
+        pl = QLabel(label or path)
         pl.setStyleSheet("color:#14161C; font-family:'JetBrains Mono','D2Coding',monospace;"
                          "font-size:12px; background:transparent;")
         h.addWidget(pl); h.addStretch()
@@ -2787,6 +2811,13 @@ class MainWindow(QMainWindow):
         if not folders:
             self._warn("스캔 폴더 필요", "스캔할 폴더를 한 곳 이상 선택하세요.")
             return
+        # 선택한 폴더를 저장 → 다음 점검에서 복원
+        if self.cfg is not None:
+            try:
+                self.cfg.target_folders = folders
+                self.cfg.save()
+            except Exception:
+                pass
         self.stack.setCurrentWidget(self.scanning)
         self.progress_bar.setValue(0)
         self.pct_label.setText("0%")

@@ -339,15 +339,25 @@ class OnboardingWizard(QDialog):
             if it.widget():
                 it.widget().deleteLater()
         self._folder_checks = []
-        names, seen = [], set()
-        for role in self.roles:
-            for n in PROFILE_FOLDERS.get(role, []):
-                if n not in seen:
-                    seen.add(n); names.append(n)
         home = Path.home()
+        names = ["Downloads", "Desktop", "Documents", "Pictures"]
+        names += [n for role in self.roles for n in PROFILE_FOLDERS.get(role, [])]
+        # 실제 존재하는 폴더만 노출(없는 추천 폴더는 숨김). (경로, 기본선택여부)
+        rows, seen = [], set()
         for n in names:
             p = home / n
-            on = p.exists()
+            key = str(p).lower()
+            if key in seen:
+                continue
+            try:
+                if p.exists() and p.is_dir():
+                    seen.add(key); rows.append((p, True))   # 추천 폴더 기본 선택
+            except OSError:
+                continue
+        for od in (home / "OneDrive", home / "OneDrive - Personal"):
+            if od.exists() and str(od).lower() not in seen:
+                seen.add(str(od).lower()); rows.append((od, False))  # OneDrive 기본 해제
+        for p, on in rows:
             b = QPushButton(); b.setObjectName("ChkCard")
             b.setCheckable(True); b.setChecked(on); b.setMinimumHeight(44)
             h = QHBoxLayout(b); h.setContentsMargins(13, 9, 13, 9); h.setSpacing(11)
