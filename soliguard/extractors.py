@@ -102,11 +102,30 @@ def is_supported(path: str | Path) -> bool:
     return Path(path).suffix.lower() in _ALL_SUPPORTED
 
 
+#: 추출 시 메모리에 통째로 올리는 포맷의 파일 크기 상한(초과 시 검사불가).
+#: SQLite(.db 등)는 행 상한으로 스트리밍하므로 이 제한에서 제외한다.
+MAX_EXTRACT_BYTES = 200 * 1024 * 1024  # 200MB
+
+
+def _guard_size(path: Path) -> None:
+    if path.suffix.lower() in SUPPORTED_DB:
+        return
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return
+    if size > MAX_EXTRACT_BYTES:
+        raise ExtractionError(
+            f"파일이 너무 커서 건너뜀 "
+            f"({size // (1024 * 1024)}MB > {MAX_EXTRACT_BYTES // (1024 * 1024)}MB)")
+
+
 def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
     """확장자에 맞는 추출기로 분기. 실패 시 ExtractionError."""
     path = Path(path)
     ext = path.suffix.lower()
     try:
+        _guard_size(path)
         if ext in SUPPORTED_TEXT:
             return _extract_plain(path)
         if ext == ".xlsx":
@@ -143,6 +162,7 @@ def extract_doc(path: str | Path, ocr_enabled: bool = True) -> ExtractedDoc:
     그 외 포맷은 기존 extract_text 결과를 라벨 없는 ExtractedDoc 로 감싼다."""
     path = Path(path)
     ext = path.suffix.lower()
+    _guard_size(path)  # 초과 시 ExtractionError → 검사불가
     try:
         if ext == ".csv":
             return _doc_csv(path)

@@ -324,32 +324,44 @@ class ScanWorker(QThread):
         return self._paused
 
     def run(self):
+        from pathlib import Path as _P
+
         from .detection import DetectionEngine
         from .engine import DEFAULT_EXCLUDES, PROFILE_ROLE, ScanSummary
-        from .scanner import collect_files, scan_file
+        from .scanner import FileScanResult, collect_files, scan_file
 
-        roles = {PROFILE_ROLE[p] for p in self.profiles if p in PROFILE_ROLE}
-        engine = DetectionEngine(roles=roles or None, user_whitelist=self.user_whitelist)
-        files = collect_files(self.folders, exclude=DEFAULT_EXCLUDES)
-        total = len(files)
         results, scanned, skipped = [], 0, 0
         buckets = {"주민등록번호": 0, "신용카드번호": 0, "API키/DB": 0,
                    "전화·이메일": 0, "기타": 0}
-        for i, fpath in enumerate(files, 1):
-            while self._paused and not self._stop:
-                self.msleep(120)
-            if self._stop:
-                break
-            r = scan_file(fpath, engine, ocr_enabled=self.ocr_enabled)
-            results.append(r)
-            if r.status == "검사불가":
-                skipped += 1
-            else:
-                scanned += 1
-                for f in r.findings:
-                    buckets[_bucket_of(f.info_type)] += 1
-            self.progress.emit(i, total, str(fpath), dict(buckets))
-        self.finished_scan.emit(ScanSummary(file_results=results, scanned=scanned, skipped=skipped))
+        # 어떤 예외가 나도 finished_scan 은 반드시 한 번 발생시켜 화면 멈춤을 막는다.
+        try:
+            roles = {PROFILE_ROLE[p] for p in self.profiles if p in PROFILE_ROLE}
+            engine = DetectionEngine(roles=roles or None,
+                                     user_whitelist=self.user_whitelist)
+            files = collect_files(self.folders, exclude=DEFAULT_EXCLUDES)
+            total = len(files)
+            for i, fpath in enumerate(files, 1):
+                while self._paused and not self._stop:
+                    self.msleep(120)
+                if self._stop:
+                    break
+                try:
+                    r = scan_file(fpath, engine, ocr_enabled=self.ocr_enabled)
+                except Exception as e:  # 개별 파일 오류가 스캔 전체를 멈추지 않게
+                    r = FileScanResult(_P(fpath), "검사불가", error=f"처리 오류: {e}")
+                results.append(r)
+                if r.status == "검사불가":
+                    skipped += 1
+                else:
+                    scanned += 1
+                    for f in r.findings:
+                        buckets[_bucket_of(f.info_type)] += 1
+                self.progress.emit(i, total, str(fpath), dict(buckets))
+        except Exception:
+            pass  # 수집/엔진 초기화 실패도 부분 결과로 마무리
+        finally:
+            self.finished_scan.emit(
+                ScanSummary(file_results=results, scanned=scanned, skipped=skipped))
 
 
 class _ScanRing(QWidget):
