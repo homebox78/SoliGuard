@@ -368,6 +368,37 @@ class SecretDetector(Detector):
             ),
             value_group=None,
         ),
+        # ── 구조/접두어 기반 현대식 토큰(키워드 없이도 검출, 오탐 거의 없음) ──
+        SecretRule(
+            "jwt",
+            "JWT 토큰",
+            re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "github_token",
+            "GitHub 토큰",
+            re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "slack_token",
+            "Slack 토큰",
+            re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,48}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "google_api_key",
+            "Google API 키",
+            re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+            value_group=None,
+        ),
+        SecretRule(
+            "stripe_key",
+            "Stripe 키",
+            re.compile(r"\bsk_(?:live|test)_[0-9A-Za-z]{16,}"),
+            value_group=None,
+        ),
         SecretRule(
             "assigned_secret",
             "API 키/시크릿",
