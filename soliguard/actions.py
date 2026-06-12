@@ -55,7 +55,10 @@ _legacy_migrated = False
 
 def _connect() -> sqlite3.Connection:
     APP_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(AUDIT_DB)
+    conn = sqlite3.connect(AUDIT_DB, timeout=5)
+    # GUI와 에이전트 동시 기록 시 'database is locked' 완화
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=3000")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS audit(
             id INTEGER PRIMARY KEY AUTOINCREMENT,

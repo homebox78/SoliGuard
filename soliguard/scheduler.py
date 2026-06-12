@@ -17,7 +17,6 @@ from pathlib import Path
 
 from .config import DATA_DIR, AppConfig, ScheduleConfig
 from .engine import run_scan
-from .profiles import PROFILE_OCR_DEFAULT
 
 log = logging.getLogger("soliguard.agent")
 
@@ -113,9 +112,12 @@ def run_scheduled_scan() -> None:
         return
 
     log.info("정기 스캔 시작: %s", folders)
-    ocr_enabled = cfg.ocr_mode != "off" or PROFILE_OCR_DEFAULT.get(cfg.profile, False)
+    # 사용자가 OCR off 로 두면 존중(직무 기본값으로 덮어쓰지 않음)
+    ocr_enabled = cfg.ocr_mode != "off"
+    # GUI와 동일하게 복수 직무 전체를 반영(개발자 secret/IP 등 누락 방지)
+    profiles = list(cfg.profiles) or None
     summary = run_scan(
-        folders, profile=cfg.profile, ocr_enabled=ocr_enabled,
+        folders, profile=cfg.profile, profiles=profiles, ocr_enabled=ocr_enabled,
         excludes=set(cfg.exclude_folders),
     )
     log.info("스캔 완료: 발견 %d건, 등급 %s",
@@ -134,9 +136,11 @@ def run_scheduled_scan() -> None:
     if cfg.auto_action == "quarantine" and summary.risk_grade != "안전":
         from .actions import quarantine_file
 
+        _order = {"높음": 3, "중간": 2, "낮음": 1}
         for r in summary.file_results:
             if any(f.severity.value == "높음" for f in r.findings):
-                quarantine_file(Path(r.path))
+                top = max(r.findings, key=lambda f: _order.get(f.severity.value, 0))
+                quarantine_file(Path(r.path), top.info_type, top.severity.value)
                 log.info("자동 격리: %s", r.path)
 
     _notify(summary, report_path)

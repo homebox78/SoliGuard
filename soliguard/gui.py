@@ -3214,7 +3214,9 @@ class MainWindow(QMainWindow):
         from .actions import mask_in_text_file
         ok = sum(1 for p, fs in g.items() if mask_in_text_file(p, fs).status == "success")
         self._action_counts["mask"] += ok
-        self._success("마스킹 완료", f"{ok}개 파일의 마스킹 사본을 생성했습니다.")
+        self._success("마스킹 완료",
+                      f"{ok}개 파일의 마스킹 사본(_masked)을 생성했습니다. "
+                      "원본에는 개인정보가 그대로 남아 있으니, 필요하면 원본을 격리/삭제하세요.")
         self._render_recent()
 
     def _action_quarantine(self):

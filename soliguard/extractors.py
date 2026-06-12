@@ -593,18 +593,25 @@ def _extract_image(path: Path) -> str:
     return pytesseract.image_to_string(img, lang=lang)
 
 
+#: 스캔 PDF OCR 최대 페이지(대용량 스캔본의 시간·메모리 폭주 방지)
+MAX_OCR_PAGES = 30
+
+
 def _ocr_pdf(path: Path) -> str:
-    """스캔 PDF를 이미지로 변환 후 OCR. pdf2image + pytesseract 필요."""
+    """스캔 PDF를 이미지로 변환 후 OCR. pdf2image + pytesseract 필요.
+
+    선두 MAX_OCR_PAGES 페이지까지만 처리한다(대용량 스캔본 보호)."""
     try:
         from pdf2image import convert_from_path  # type: ignore
         import pytesseract  # type: ignore
     except ImportError:
         raise ExtractionError("스캔 PDF OCR에 pdf2image/pytesseract 가 필요합니다")
     lang = _configure_ocr()
-    parts = [
-        pytesseract.image_to_string(img, lang=lang)
-        for img in convert_from_path(str(path), dpi=200)
-    ]
+    images = convert_from_path(
+        str(path), dpi=200, first_page=1, last_page=MAX_OCR_PAGES)
+    parts = [pytesseract.image_to_string(img, lang=lang) for img in images]
+    if len(images) >= MAX_OCR_PAGES:
+        parts.append(f"[안내] OCR은 선두 {MAX_OCR_PAGES}페이지까지만 검사했습니다.")
     return "\n".join(parts)
 
 

@@ -18,6 +18,31 @@ DATA_DIR = APP_DIR
 
 __all__ = ["AppConfig", "ScheduleConfig", "CONFIG_DIR", "DATA_DIR", "CONFIG_FILE"]
 
+_migrated = False
+
+
+def _migrate_legacy_config() -> None:
+    """이전 platformdirs(AppData) 설정을 단일 경로로 1회 이관(더 최신본 우선)."""
+    global _migrated
+    if _migrated:
+        return
+    _migrated = True
+    try:
+        from platformdirs import user_config_dir, user_data_dir
+        legacy = [
+            Path(user_config_dir("SoliGuard", "Solideo")) / "config.json",
+            Path(user_data_dir("SoliGuard", "Solideo")) / "config.json",
+        ]
+        cur_m = CONFIG_FILE.stat().st_mtime if CONFIG_FILE.exists() else -1
+        for lg in legacy:
+            if lg.exists() and lg.resolve() != CONFIG_FILE.resolve() \
+                    and lg.stat().st_mtime > cur_m:
+                APP_DIR.mkdir(parents=True, exist_ok=True)
+                CONFIG_FILE.write_bytes(lg.read_bytes())
+                return
+    except Exception:
+        pass
+
 
 @dataclass
 class ScheduleConfig:
@@ -48,6 +73,7 @@ class AppConfig:
 
     @classmethod
     def load(cls) -> "AppConfig":
+        _migrate_legacy_config()
         if CONFIG_FILE.exists():
             try:
                 data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
