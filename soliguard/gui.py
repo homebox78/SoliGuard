@@ -615,7 +615,8 @@ class NoticeDialog(QDialog):
         "error":   ("alert",       "#B0123F", "#FDEAEA"),
     }
 
-    def __init__(self, parent, title, message, kind="info"):
+    def __init__(self, parent, title, message, kind="info",
+                 action_label=None, on_action=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -642,6 +643,11 @@ class NoticeDialog(QDialog):
         lay.addLayout(hd)
 
         foot = QHBoxLayout(); foot.addStretch()
+        if action_label and on_action:
+            act = QPushButton(action_label); act.setObjectName("Ghost")
+            act.setCursor(Qt.PointingHandCursor)
+            act.clicked.connect(lambda: (on_action(), self.accept()))
+            foot.addWidget(act)
         ok = QPushButton("확인"); ok.setObjectName("Primary")
         ok.setMinimumWidth(96); ok.setCursor(Qt.PointingHandCursor)
         ok.clicked.connect(self.accept)
@@ -2342,14 +2348,16 @@ class MainWindow(QMainWindow):
         uc = QVBoxLayout(); uc.setSpacing(1)
         u1 = QLabel("업데이트"); u1.setStyleSheet("font-weight:700;")
         uc.addWidget(u1)
-        u2 = QLabel("최신 버전을 사용 중입니다")
-        u2.setStyleSheet("color:#565E6C; font-size:12px;")
-        uc.addWidget(u2)
+        self._upd_status = QLabel(
+            "현재 버전 v" + getattr(__import__("soliguard"), "__version__", "1.0"))
+        self._upd_status.setStyleSheet("color:#565E6C; font-size:12px;")
+        uc.addWidget(self._upd_status)
         ur.addLayout(uc); ur.addStretch()
-        upd = QPushButton("업데이트 확인")
-        upd.setObjectName("Ghost")
-        upd.clicked.connect(lambda: self._notice("업데이트", "최신 버전을 사용 중입니다."))
-        ur.addWidget(upd)
+        self._upd_btn = QPushButton("업데이트 확인")
+        self._upd_btn.setObjectName("Ghost")
+        self._upd_btn.setCursor(Qt.PointingHandCursor)
+        self._upd_btn.clicked.connect(self._check_update)
+        ur.addWidget(self._upd_btn)
         gl.addLayout(ur)
         gl.addStretch()
         return self._tab_wrap(c)
@@ -3312,6 +3320,51 @@ class MainWindow(QMainWindow):
 
     def _success(self, title: str, message: str):
         self._notice(title, message, "success")
+
+    # -------------------------------------------------------- 업데이트 확인
+    def _check_update(self):
+        """GitHub Releases 최신 버전과 비교(버튼 클릭 시 1회 조회)."""
+        from PySide6.QtCore import QThread, Signal
+
+        self._upd_btn.setEnabled(False)
+        self._upd_btn.setText("확인 중...")
+
+        class _Worker(QThread):
+            result = Signal(object, str)
+
+            def run(self):
+                try:
+                    from .updates import check_for_update
+                    cur = getattr(__import__("soliguard"), "__version__", "0.0.0")
+                    self.result.emit(check_for_update(current=cur), "")
+                except Exception as e:  # UpdateError 포함
+                    self.result.emit(None, str(e))
+
+        self._upd_worker = _Worker()
+        self._upd_worker.result.connect(self._on_update_result)
+        self._upd_worker.start()
+
+    def _on_update_result(self, info, error: str):
+        self._upd_btn.setEnabled(True)
+        self._upd_btn.setText("업데이트 확인")
+        if error:
+            self._warn("업데이트 확인 실패", error)
+            return
+        if info.is_newer:
+            self._upd_status.setText(f"새 버전 v{info.latest} 있음 (현재 v{info.current})")
+            self._upd_status.setStyleSheet("color:#B0123F; font-size:12px; font-weight:700;")
+            import webbrowser
+            NoticeDialog(
+                self, "업데이트 있음",
+                f"새 버전 v{info.latest} 이(가) 있습니다. 현재 버전은 v{info.current}입니다.\n"
+                "릴리스 페이지에서 최신 설치본을 받을 수 있습니다.",
+                kind="info",
+                action_label="  릴리스 페이지 열기",
+                on_action=lambda u=info.download_url: webbrowser.open(u),
+            ).exec()
+        else:
+            self._upd_status.setText(f"최신 버전을 사용 중입니다 (v{info.current})")
+            self._notice("업데이트", f"최신 버전을 사용 중입니다 (v{info.current}).")
 
     def _toast(self, message: str):
         from PySide6.QtCore import QTimer
