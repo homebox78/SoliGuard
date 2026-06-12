@@ -395,12 +395,12 @@ class InstallerWizard(QWidget):
         self._index = 0
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 20, 20, 20)  # 그림자 여백
+        outer.setContentsMargins(26, 24, 26, 30)  # 그림자 여백(블러가 잘리지 않게)
         self.win = QFrame()
         self.win.setObjectName("Win")
         self.win.setStyleSheet(_qss(self.fam))
         sh = QGraphicsDropShadowEffect(self)
-        sh.setBlurRadius(60); sh.setOffset(0, 18); sh.setColor(QColor(0, 0, 0, 120))
+        sh.setBlurRadius(34); sh.setOffset(0, 6); sh.setColor(QColor(15, 23, 42, 55))
         self.win.setGraphicsEffect(sh)
         outer.addWidget(self.win)
 
@@ -756,8 +756,10 @@ class InstallerWizard(QWidget):
         v.addWidget(body); v.addSpacing(18)
         self.run_btn = self._check_card("지금 솔리가드 실행", True,
                                         lambda on: setattr(self, "run_now", on))
-        self.run_btn.setMaximumWidth(360)
-        v.addWidget(self.run_btn, 0, Qt.AlignHCenter)
+        self.run_btn.setFixedWidth(300)  # 고정 폭 — 라벨이 잘려 사라지지 않게
+        rrow = QHBoxLayout(); rrow.setContentsMargins(0, 0, 0, 0)
+        rrow.addStretch(); rrow.addWidget(self.run_btn); rrow.addStretch()
+        v.addLayout(rrow)
         v.addStretch()
         return w
 
