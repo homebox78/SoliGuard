@@ -77,9 +77,13 @@ SUPPORTED_TEXT = {
     ".md", ".yml", ".yaml", ".ini", ".cfg", ".conf", ".toml",
     ".properties", ".env", ".html", ".htm",
     # 소스코드(SI 개발자 산출물)
-    ".py", ".java", ".js", ".ts", ".tsx", ".jsx", ".kt", ".go", ".c", ".cpp",
-    ".h", ".hpp", ".cs", ".php", ".rb", ".rs", ".swift", ".scala", ".pl", ".r",
+    ".py", ".java", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs",
+    ".kt", ".go", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".rb", ".rs",
+    ".swift", ".scala", ".pl", ".r", ".dart", ".lua", ".groovy", ".gradle",
     ".sh", ".bat", ".ps1",
+    # 프런트엔드/템플릿/뷰(Vue·Svelte·Astro·서버 템플릿)
+    ".vue", ".svelte", ".astro", ".jsp", ".asp", ".aspx", ".cshtml",
+    ".erb", ".ejs", ".hbs", ".twig", ".graphql", ".proto", ".json5",
     # DB/백업 — 텍스트 덤프(SQL 스크립트, mysqldump/pg_dump 등)
     ".sql", ".ddl", ".dump", ".bak",
 }
