@@ -8,6 +8,17 @@
 PySide6 GUI(대시보드·스캔·결과·격리함·이력·설정), 트레이 상주 + 정기 자동 점검,
 직무별 스캔 프로파일, PDF 진단서까지 포함한 완성형 구조다.
 
+## 다운로드 / 설치
+
+> **[⬇ SoliGuardSetup.exe 내려받기 (최신 릴리즈)](https://github.com/homebox78/SoliGuard/releases/latest/download/SoliGuardSetup.exe)**
+
+내려받은 **`SoliGuardSetup.exe` 하나만 실행**하면 설치됩니다 — 관리자 권한 없이 사용자 영역에
+설치되며, 별도 런타임·추가 파일이 필요 없습니다. 설치 마법사 안내(환영 → 사용권 → 설치 위치 →
+구성요소 → 설치 → 완료)를 따르면 됩니다. 모든 처리는 설치된 PC 로컬에서만 수행됩니다.
+
+- 최신 릴리즈: <https://github.com/homebox78/SoliGuard/releases/latest>
+- 특정 버전(v0.4.1): <https://github.com/homebox78/SoliGuard/releases/tag/v0.4.1>
+
 ## 무엇을 하는가
 
 기획서가 명시한 **2단계 검출**(① 정규식으로 후보를 빠르게 찾고 → ② 검증 알고리즘으로
@@ -105,14 +116,14 @@ installer.iss               # Inno Setup 설치 스크립트(작업 스케줄러
 
 ```powershell
 pip install -e ".[all,build]"          # 전체 의존성 + PyInstaller
-pyinstaller build_exe.spec             # dist/SoliGuard/{SoliGuard,SoliGuardAgent}.exe
+pyinstaller build_exe.spec             # onedir → dist/SoliGuard/ (SoliGuard.exe + _internal)
 ISCC installer.iss                     # SoliGuard_Setup.exe (Inno Setup)
 ```
 
 > 빌드 산출물(`dist/`, `build/`, `*.egg-info`)은 저장소에 포함하지 않는다(`.gitignore` 처리).
 
 생애주기: 설치(작업 스케줄러 등록 옵션) → 최초 실행 온보딩 → 메인 앱(트레이 상주) →
-주기적으로 OS가 `SoliGuardAgent.exe --once` 를 깨워 무인 스캔·리포트·토스트 알림.
+주기적으로 OS가 `SoliGuard.exe --once` 를 깨워 무인 스캔·리포트·토스트 알림.
 자동 완전삭제는 제공하지 않으며, 자동 격리는 설정 시에만 동작한다.
 
 ## 실행
