@@ -57,9 +57,10 @@ PROFILE_EXTENSIONS = {
         ".env", ".yml", ".yaml", ".ini", ".cfg", ".conf", ".config",
         ".toml", ".properties", ".tf", ".tfvars", ".dockerfile",
         ".sh", ".bash", ".zsh", ".bat", ".cmd", ".ps1", ".psm1",
-        # DB·데이터
-        ".sql", ".db", ".sqlite", ".sqlite3", ".json", ".xml", ".csv",
-        ".tsv", ".log", ".txt",
+        # DB·데이터(백업된 고객 데이터 — SQL 덤프·DB 파일 포함)
+        ".sql", ".ddl", ".dump", ".bak", ".db", ".sqlite", ".sqlite3",
+        ".json", ".jsonl", ".xml", ".csv", ".tsv", ".log", ".txt",
+        ".xlsx", ".docx", ".pdf",
     },
     "디자이너": {
         ".psd", ".psb", ".xd",                          # 디자인 원본
@@ -69,7 +70,8 @@ PROFILE_EXTENSIONS = {
     "기획자": {".docx", ".hwp", ".hwpx", ".pptx", ".xlsx", ".csv", ".pdf", ".txt"},
     "PM": {".pptx", ".xlsx", ".xls", ".docx", ".hwp", ".hwpx", ".csv",
            ".pdf", ".txt"},
-    "전산사무": {".xlsx", ".xls", ".csv", ".docx", ".hwp", ".hwpx", ".pdf", ".txt"},
+    "전산사무": {".xlsx", ".xls", ".csv", ".tsv", ".docx", ".hwp", ".hwpx",
+                ".pdf", ".txt", ".sql", ".db", ".sqlite"},
 }
 
 # 직무별 권장 스캔 폴더 — (참고용. 현재는 폴더를 직무와 분리하므로 사용하지 않는다.

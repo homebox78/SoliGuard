@@ -1,6 +1,6 @@
-"""사용자 설정 로드/저장 - OS 표준 경로에 JSON 보관.
+"""사용자 설정 로드/저장 - 단일 앱 디렉터리(~/.soliguard)에 JSON 보관.
 
-platformdirs 가 있으면 OS 표준 경로를, 없으면 ~/.soliguard 로 폴백한다.
+저장 경로는 paths.py 한 곳에서 관리하며, 격리·감사로그와 같은 루트를 쓴다.
 설정은 온보딩·스케줄러·설정 화면이 공유한다.
 """
 
@@ -10,19 +10,38 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-try:
-    from platformdirs import user_config_dir, user_data_dir
+# 단일 저장 위치(~/.soliguard)로 통일 — 격리/감사로그와 같은 루트.
+from .paths import APP_DIR, CONFIG_FILE  # noqa: E402
 
-    CONFIG_DIR = Path(user_config_dir("SoliGuard", "Solideo"))
-    DATA_DIR = Path(user_data_dir("SoliGuard", "Solideo"))
-except ImportError:  # 폴백: actions 와 동일한 홈 디렉터리 계열
-    _HOME = Path.home() / ".soliguard"
-    CONFIG_DIR = _HOME
-    DATA_DIR = _HOME / "data"
-
-CONFIG_FILE = CONFIG_DIR / "config.json"
+CONFIG_DIR = APP_DIR
+DATA_DIR = APP_DIR
 
 __all__ = ["AppConfig", "ScheduleConfig", "CONFIG_DIR", "DATA_DIR", "CONFIG_FILE"]
+
+_migrated = False
+
+
+def _migrate_legacy_config() -> None:
+    """이전 platformdirs(AppData) 설정을 단일 경로로 1회 이관(더 최신본 우선)."""
+    global _migrated
+    if _migrated:
+        return
+    _migrated = True
+    try:
+        from platformdirs import user_config_dir, user_data_dir
+        legacy = [
+            Path(user_config_dir("SoliGuard", "Solideo")) / "config.json",
+            Path(user_data_dir("SoliGuard", "Solideo")) / "config.json",
+        ]
+        cur_m = CONFIG_FILE.stat().st_mtime if CONFIG_FILE.exists() else -1
+        for lg in legacy:
+            if lg.exists() and lg.resolve() != CONFIG_FILE.resolve() \
+                    and lg.stat().st_mtime > cur_m:
+                APP_DIR.mkdir(parents=True, exist_ok=True)
+                CONFIG_FILE.write_bytes(lg.read_bytes())
+                return
+    except Exception:
+        pass
 
 
 @dataclass
@@ -54,6 +73,7 @@ class AppConfig:
 
     @classmethod
     def load(cls) -> "AppConfig":
+        _migrate_legacy_config()
         if CONFIG_FILE.exists():
             try:
                 data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))

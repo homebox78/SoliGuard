@@ -6,6 +6,7 @@ __pycache__/
 .eggs/
 build/
 dist/
+Output/
 *.spec.bak
 
 # 가상환경

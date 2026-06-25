@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from . import validators as V
-from .base import Confidence, Detector, Finding, LineIndex, Severity
+from .base import Confidence, Detector, Finding, LineIndex, Severity, _context
 
 # 직무 식별자 상수
 ROLE_DEVELOPER = "developer"
@@ -94,7 +94,7 @@ class CreditCardDetector(Detector):
         return self._pat
 
     def validate(self, raw: str) -> bool:
-        return V.luhn_valid(raw)
+        return V.validate_credit_card(raw)
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
@@ -190,14 +190,45 @@ class AccountDetector(Detector):
     # 3그룹(하이픈 2개) 형태만, 첫 그룹 2~4자리(은행 계좌 형태)
     _pat = re.compile(r"(?<![\d-])\d{2,4}-\d{2,6}-\d{2,6}(?:-\d{1,6})?(?![\d-])")
 
+    # 주요 한국 은행/금융기관 명칭 — 주변 문맥에 있으면 계좌로 확정(오탐 감소)
+    _BANKS = (
+        "은행", "bank", "국민", "kb", "신한", "우리", "하나", "농협", "nh", "기업",
+        "ibk", "수협", "대구", "부산", "경남", "광주", "전북", "제주", "새마을",
+        "신협", "우체국", "산업", "kdb", "씨티", "citi", "sc제일", "카카오뱅크",
+        "카카오", "케이뱅크", "토스", "저축은행", "예금", "입금", "송금", "이체",
+    )
+
     @property
     def pattern(self) -> re.Pattern[str]:
         return self._pat
 
-    def validate(self, raw: str) -> bool:
-        d = V.digits_only(raw)
-        # 11~14자리 + 충분한 자릿수 다양성(사번·일련번호 등 오탐 억제)
-        return 11 <= len(d) <= 14 and len(set(d)) >= 4
+    def detect(self, text: str, line_index: LineIndex):
+        """계좌 형식 + 주변 문맥(은행명/계좌 키워드)까지 있어야 검증 통과로 본다.
+
+        문맥이 없으면 약후보(PATTERN_ONLY)로 내보내, 자유 텍스트의 임의 하이픈
+        숫자(추적/정산코드 등) 오탐을 막는다. '계좌' 열/키에 있으면 엔진이 구제한다."""
+        ctx_keys = self._BANKS + self.field_keywords
+        for m in self.pattern.finditer(text):
+            raw = m.group(0)
+            d = V.digits_only(raw)
+            start, end = m.start(), m.end()
+            base_ok = 11 <= len(d) <= 14 and len(set(d)) > 2
+            window = _context(text, start, end).lower()
+            has_ctx = any(k in window for k in ctx_keys)
+            verified = base_ok and has_ctx
+            yield Finding(
+                detector=self.name,
+                info_type=self.info_type,
+                severity=self.severity,
+                confidence=Confidence.VERIFIED if verified else Confidence.PATTERN_ONLY,
+                raw=raw,
+                masked=self.mask(raw),
+                start=start,
+                end=end,
+                line=line_index.line_of(start),
+                context=_context(text, start, end),
+                weak=not verified,
+            )
 
     def mask(self, raw: str) -> str:
         # 구분자(하이픈 등)는 보존하고 끝 4자리만 노출, 나머지 숫자는 가린다.
@@ -213,11 +244,15 @@ class AccountDetector(Detector):
 
 
 class PassportDetector(Detector):
-    """여권번호. 발급기호(영문 1자) + 숫자 8자리 형식·기호 검증."""
+    """여권번호. 발급기호(영문 1자) + 숫자 8자리 형식·기호 검증.
+
+    영문1+숫자8 형식은 주문/제품 코드와 겹치는 오탐 위험이 있어, 자유 텍스트에서는
+    MEDIUM으로 두고 '여권' 열/키에 있을 때만 HIGH로 승격한다."""
 
     name = "passport"
     info_type = "여권번호"
-    severity = Severity.HIGH
+    severity = Severity.MEDIUM
+    field_severity = Severity.HIGH
     field_keywords = ("여권", "passport", "passportno")
 
     # 영문 1자 + 숫자 8자(구권/전자여권). 앞뒤 영숫자 경계로 토큰 분리.
@@ -237,21 +272,28 @@ class PassportDetector(Detector):
 
 
 class DriverLicenseDetector(Detector):
-    """운전면허번호. 지역코드(2)-연도(2)-일련(6)-검증(2) 형식·지역 검증."""
+    """운전면허번호. 지역코드(2)-연도(2)-일련(6)-검증(2) 형식·지역 검증.
+
+    구분자 없는 순수 12자리는 주문번호 등과 겹쳐 오탐이 많으므로 약후보(PATTERN_ONLY)로
+    두고 '면허' 열/키에 있을 때만 구제·승격한다. 구분자(하이픈/공백)가 있으면 검증 통과."""
 
     name = "driver_license"
     info_type = "운전면허번호"
-    severity = Severity.HIGH
+    severity = Severity.MEDIUM
+    field_severity = Severity.HIGH
     field_keywords = ("운전면허", "면허번호", "면허", "license", "driver")
 
-    _pat = re.compile(r"(?<!\d)\d{2}-?\d{2}-?\d{6}-?\d{2}(?!\d)")
+    _pat = re.compile(r"(?<!\d)\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}(?!\d)")
 
     @property
     def pattern(self) -> re.Pattern[str]:
         return self._pat
 
     def validate(self, raw: str) -> bool:
-        return V.validate_driver_license(raw)
+        # 형식·지역코드 + 구분자(하이픈/공백) 존재까지 충족해야 검증 통과.
+        # 순수 12자리는 약후보로 남겨 자유 텍스트 오탐을 차단한다.
+        has_sep = "-" in raw or " " in raw
+        return has_sep and V.validate_driver_license(raw)
 
     def mask(self, raw: str) -> str:
         d = V.digits_only(raw)
@@ -267,7 +309,8 @@ class IPDetector(Detector):
     default_roles = frozenset({ROLE_DEVELOPER})
     field_keywords = ("ip", "아이피", "ipaddr", "host", "서버")
 
-    _pat = re.compile(r"(?<![\d.])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\d.])")
+    # 앞에 v/V(버전 문자열 v1.2.3.4)나 숫자·점이 오면 제외
+    _pat = re.compile(r"(?<![\d.vV])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\d.])")
 
     @property
     def pattern(self) -> re.Pattern[str]:
@@ -391,6 +434,37 @@ class SecretDetector(Detector):
                 r"(?i)(?:jdbc:)?(?:mysql|postgresql|postgres|mongodb|oracle|mariadb|sqlserver)"
                 r":\/\/[^\s'\"]*:[^\s'\"]+@[^\s'\"]+"
             ),
+            value_group=None,
+        ),
+        # ── 구조/접두어 기반 현대식 토큰(키워드 없이도 검출, 오탐 거의 없음) ──
+        SecretRule(
+            "jwt",
+            "JWT 토큰",
+            re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "github_token",
+            "GitHub 토큰",
+            re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "slack_token",
+            "Slack 토큰",
+            re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,48}"),
+            value_group=None,
+        ),
+        SecretRule(
+            "google_api_key",
+            "Google API 키",
+            re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+            value_group=None,
+        ),
+        SecretRule(
+            "stripe_key",
+            "Stripe 키",
+            re.compile(r"\bsk_(?:live|test)_[0-9A-Za-z]{16,}"),
             value_group=None,
         ),
         SecretRule(

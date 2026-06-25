@@ -358,36 +358,49 @@ class ScanWorker(QThread):
         return self._paused
 
     def run(self):
+        from pathlib import Path as _P
+
         from .detection import DetectionEngine
         from .engine import DEFAULT_EXCLUDES, PROFILE_ROLE, ScanSummary
-        from .scanner import collect_files, scan_file
+        from .scanner import FileScanResult, collect_files, scan_file
 
         from .profiles import extensions_for
 
-        roles = {PROFILE_ROLE[p] for p in self.profiles if p in PROFILE_ROLE}
-        engine = DetectionEngine(roles=roles or None, user_whitelist=self.user_whitelist)
-        # 직무 프로파일 = 검사할 파일 확장자 필터(폴더와 무관).
-        exts = extensions_for(self.profiles)
-        files = collect_files(self.folders, exclude=DEFAULT_EXCLUDES, extensions=exts)
-        total = len(files)
         results, scanned, skipped = [], 0, 0
         buckets = {"주민등록번호": 0, "신용카드번호": 0, "API키/DB": 0,
                    "전화·이메일": 0, "기타": 0}
-        for i, fpath in enumerate(files, 1):
-            while self._paused and not self._stop:
-                self.msleep(120)
-            if self._stop:
-                break
-            r = scan_file(fpath, engine, ocr_enabled=self.ocr_enabled)
-            results.append(r)
-            if r.status == "검사불가":
-                skipped += 1
-            else:
-                scanned += 1
-                for f in r.findings:
-                    buckets[_bucket_of(f.info_type)] += 1
-            self.progress.emit(i, total, str(fpath), dict(buckets))
-        self.finished_scan.emit(ScanSummary(file_results=results, scanned=scanned, skipped=skipped))
+        # 어떤 예외가 나도 finished_scan 은 반드시 한 번 발생시켜 화면 멈춤을 막는다.
+        try:
+            roles = {PROFILE_ROLE[p] for p in self.profiles if p in PROFILE_ROLE}
+            engine = DetectionEngine(roles=roles or None,
+                                     user_whitelist=self.user_whitelist)
+            # 직무 프로파일 = 검사할 파일 확장자 필터(폴더와 무관).
+            exts = extensions_for(self.profiles)
+            files = collect_files(self.folders, exclude=DEFAULT_EXCLUDES,
+                                  extensions=exts)
+            total = len(files)
+            for i, fpath in enumerate(files, 1):
+                while self._paused and not self._stop:
+                    self.msleep(120)
+                if self._stop:
+                    break
+                try:
+                    r = scan_file(fpath, engine, ocr_enabled=self.ocr_enabled)
+                except Exception as e:  # 개별 파일 오류가 스캔 전체를 멈추지 않게
+                    r = FileScanResult(_P(fpath), "검사불가", error=f"처리 오류: {e}")
+                results.append(r)
+                if r.status == "검사불가":
+                    skipped += 1
+                else:
+                    scanned += 1
+                    for f in r.findings:
+                        buckets[_bucket_of(f.info_type)] += 1
+                self.progress.emit(i, total, str(fpath), dict(buckets))
+        except Exception:
+            pass  # 수집/엔진 초기화 실패도 부분 결과로 마무리
+        finally:
+            self.finished_scan.emit(
+                ScanSummary(file_results=results, scanned=scanned, skipped=skipped))
 
 
 class _ScanRing(QWidget):
@@ -641,7 +654,8 @@ class NoticeDialog(QDialog):
         "error":   ("alert",       "#B0123F", "#FDEAEA"),
     }
 
-    def __init__(self, parent, title, message, kind="info"):
+    def __init__(self, parent, title, message, kind="info",
+                 action_label=None, on_action=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -668,6 +682,11 @@ class NoticeDialog(QDialog):
         lay.addLayout(hd)
 
         foot = QHBoxLayout(); foot.addStretch()
+        if action_label and on_action:
+            act = QPushButton(action_label); act.setObjectName("Ghost")
+            act.setCursor(Qt.PointingHandCursor)
+            act.clicked.connect(lambda: (on_action(), self.accept()))
+            foot.addWidget(act)
         ok = QPushButton("확인"); ok.setObjectName("Primary")
         ok.setMinimumWidth(96); ok.setCursor(Qt.PointingHandCursor)
         ok.clicked.connect(self.accept)
@@ -2265,6 +2284,7 @@ class MainWindow(QMainWindow):
         self._settings_tabs = {}
         for key, label, ic in [("general", "일반", "settings"), ("scan", "스캔", "search"),
                                ("auto", "자동 점검", "clock"), ("security", "보안", "shield"),
+                               ("whitelist", "오탐 제외", "eyeOff"),
                                ("about", "정보", "fileText")]:
             b = QPushButton("  " + label)
             b.setObjectName("Nav")
@@ -2282,6 +2302,7 @@ class MainWindow(QMainWindow):
         self.settings_stack.addWidget(self._settings_scan())
         self.settings_stack.addWidget(self._settings_auto())
         self.settings_stack.addWidget(self._settings_security())
+        self.settings_stack.addWidget(self._settings_whitelist())
         self.settings_stack.addWidget(self._settings_about())
         body.addWidget(self.settings_stack, 1)
         lay.addLayout(body, 1)
@@ -2444,17 +2465,118 @@ class MainWindow(QMainWindow):
         uc = QVBoxLayout(); uc.setSpacing(1)
         u1 = QLabel("업데이트"); u1.setStyleSheet("font-weight:700;")
         uc.addWidget(u1)
-        u2 = QLabel("최신 버전을 사용 중입니다")
-        u2.setStyleSheet("color:#565E6C; font-size:12px;")
-        uc.addWidget(u2)
+        self._upd_status = QLabel(
+            "현재 버전 v" + getattr(__import__("soliguard"), "__version__", "1.0"))
+        self._upd_status.setStyleSheet("color:#565E6C; font-size:12px;")
+        uc.addWidget(self._upd_status)
         ur.addLayout(uc); ur.addStretch()
-        upd = QPushButton("업데이트 확인")
-        upd.setObjectName("Ghost")
-        upd.clicked.connect(lambda: self._notice("업데이트", "최신 버전을 사용 중입니다."))
-        ur.addWidget(upd)
+        self._upd_btn = QPushButton("업데이트 확인")
+        self._upd_btn.setObjectName("Ghost")
+        self._upd_btn.setCursor(Qt.PointingHandCursor)
+        self._upd_btn.clicked.connect(self._check_update)
+        ur.addWidget(self._upd_btn)
         gl.addLayout(ur)
         gl.addStretch()
         return self._tab_wrap(c)
+
+    def _settings_whitelist(self) -> QWidget:
+        """오탐 제외(화이트리스트) 관리 — 조회/추가/삭제(즉시 저장)."""
+        c = _card()
+        gl = QVBoxLayout(c)
+        gl.setContentsMargins(22, 20, 22, 20)
+        gl.setSpacing(12)
+        t = QLabel("오탐 제외 (화이트리스트)")
+        t.setStyleSheet("font-size:15px; font-weight:800;")
+        gl.addWidget(t)
+        d = QLabel("여기에 등록한 값은 다음 점검부터 검출에서 제외됩니다. "
+                   "검출 결과의 '이건 오탐이에요'로도 추가됩니다.")
+        d.setWordWrap(True)
+        d.setStyleSheet("color:#565E6C; font-size:12.5px;")
+        gl.addWidget(d)
+
+        addrow = QHBoxLayout(); addrow.setSpacing(8)
+        self._wl_input = QLineEdit()
+        self._wl_input.setPlaceholderText("제외할 값 입력 (예: 010-1234-5678)")
+        self._wl_input.returnPressed.connect(self._wl_add)
+        addrow.addWidget(self._wl_input, 1)
+        addb = QPushButton("  추가"); addb.setObjectName("Ghost")
+        addb.setIcon(QIcon(icons.line_icon("plus", 15, "#565E6C")))
+        addb.setCursor(Qt.PointingHandCursor)
+        addb.clicked.connect(self._wl_add)
+        addrow.addWidget(addb)
+        gl.addLayout(addrow)
+
+        self._wl_scroll = QScrollArea(); self._wl_scroll.setWidgetResizable(True)
+        self._wl_scroll.setFrameShape(QFrame.NoFrame)
+        self._wl_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        host = QWidget(); self._wl_list = QVBoxLayout(host)
+        self._wl_list.setContentsMargins(0, 0, 0, 0); self._wl_list.setSpacing(6)
+        self._wl_list.addStretch()
+        self._wl_scroll.setWidget(host)
+        gl.addWidget(self._wl_scroll, 1)
+        self._wl_empty = QLabel("등록된 제외 값이 없습니다.")
+        self._wl_empty.setStyleSheet("color:#8B92A0; font-size:12px; padding:8px 2px;")
+        gl.addWidget(self._wl_empty)
+        self._wl_refresh()
+
+        w = QWidget(); v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(c)
+        return w
+
+    def _wl_refresh(self):
+        if not hasattr(self, "_wl_list"):
+            return
+        wl = list(getattr(self.cfg, "whitelist", []) or [])
+        while self._wl_list.count() > 1:
+            it = self._wl_list.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        for val in wl:
+            row = QFrame(); row.setObjectName("WlRow")
+            row.setStyleSheet("QFrame#WlRow{background:#F7F8FA;border:1px solid #E7E9EE;"
+                              "border-radius:8px;}")
+            rl = QHBoxLayout(row); rl.setContentsMargins(12, 7, 8, 7); rl.setSpacing(8)
+            lab = QLabel(val); lab.setStyleSheet("font-size:12.5px;")
+            rl.addWidget(lab, 1)
+            rm = QPushButton(); rm.setObjectName("IconBtn"); rm.setFixedSize(28, 28)
+            rm.setIcon(QIcon(icons.line_icon("trash", 15, "#B0123F")))
+            rm.setCursor(Qt.PointingHandCursor)
+            rm.setStyleSheet("QPushButton#IconBtn{background:transparent;border:none;"
+                             "border-radius:7px;}QPushButton#IconBtn:hover{background:#FDEAEA;}")
+            rm.clicked.connect(lambda _=False, v=val: self._wl_remove(v))
+            rl.addWidget(rm)
+            self._wl_list.insertWidget(self._wl_list.count() - 1, row)
+        self._wl_empty.setVisible(not wl)
+        self._wl_scroll.setVisible(bool(wl))
+
+    def _wl_save(self, wl: list):
+        from .config import AppConfig
+        cfg = self.cfg or AppConfig.load()
+        cfg.whitelist = wl
+        cfg.save()
+        self.cfg = cfg
+
+    def _wl_add(self):
+        val = self._wl_input.text().strip()
+        if not val:
+            return
+        wl = list(getattr(self.cfg, "whitelist", []) or [])
+        if val in wl:
+            self._wl_input.clear()
+            self._warn("중복", "이미 등록된 값입니다.")
+            return
+        wl.append(val)
+        self._wl_save(wl)
+        self._wl_input.clear()
+        self._wl_refresh()
+        self._toast("제외 목록에 추가했습니다.")
+
+    def _wl_remove(self, val: str):
+        wl = [x for x in (getattr(self.cfg, "whitelist", []) or []) if x != val]
+        self._wl_save(wl)
+        self._wl_refresh()
+        self._toast("제외 목록에서 제거했습니다.")
 
     def _tab_wrap(self, card) -> QWidget:
         w = QWidget()
@@ -2478,7 +2600,7 @@ class MainWindow(QMainWindow):
         return ln
 
     def _set_settings_tab(self, key: str):
-        order = ["general", "scan", "auto", "security", "about"]
+        order = ["general", "scan", "auto", "security", "whitelist", "about"]
         self.settings_stack.setCurrentIndex(order.index(key))
         for k, b in self._settings_tabs.items():
             b.setChecked(k == key)
@@ -2494,15 +2616,15 @@ class MainWindow(QMainWindow):
             b.setStyleSheet(_seg_btn_qss(on))
 
     def _export_audit(self):
-        from . import actions
-        if not actions.AUDIT_LOG.exists():
+        rows0 = _read_audit_tail(100000)
+        if not rows0:
             self._notice("감사 로그", "아직 기록이 없습니다.")
             return
         path, _ = QFileDialog.getSaveFileName(self, "감사 로그 내보내기", "audit.csv", "CSV (*.csv)")
         if not path:
             return
         import csv
-        rows = _read_audit_tail(100000)
+        rows = rows0
         try:
             with open(path, "w", encoding="utf-8-sig", newline="") as f:
                 wr = csv.writer(f)
@@ -2758,7 +2880,7 @@ class MainWindow(QMainWindow):
         n = sum(1 for b, _ in self._sc_folders if b.isChecked())
         self.sc_folder_count.setText(f"{n}곳 선택")
 
-    def _add_folder_row(self, path: str, on: bool):
+    def _add_folder_row(self, path: str, on: bool, label: str | None = None):
         b = QPushButton()
         b.setObjectName("ChkCardG")
         b.setCheckable(True)
@@ -2776,7 +2898,7 @@ class MainWindow(QMainWindow):
         fic = QLabel(); fic.setPixmap(icons.line_icon("folder", 16, "#565E6C", 2))
         fic.setFixedSize(16, 16)
         h.addWidget(fic)
-        pl = QLabel(path)
+        pl = QLabel(label or path)
         pl.setStyleSheet("color:#14161C; font-family:'JetBrains Mono','D2Coding',monospace;"
                          "font-size:12px; background:transparent;")
         h.addWidget(pl); h.addStretch()
@@ -3326,7 +3448,9 @@ class MainWindow(QMainWindow):
         from .actions import mask_in_text_file
         ok = sum(1 for p, fs in g.items() if mask_in_text_file(p, fs).status == "success")
         self._action_counts["mask"] += ok
-        self._success("마스킹 완료", f"{ok}개 파일의 마스킹 사본을 생성했습니다.")
+        self._success("마스킹 완료",
+                      f"{ok}개 파일의 마스킹 사본(_masked)을 생성했습니다. "
+                      "원본에는 개인정보가 그대로 남아 있으니, 필요하면 원본을 격리/삭제하세요.")
         self._render_recent()
 
     def _action_quarantine(self):
@@ -3377,6 +3501,7 @@ class MainWindow(QMainWindow):
         cfg.whitelist = wl
         cfg.save()
         self.cfg = cfg
+        self._wl_refresh()  # 설정의 오탐 제외 목록과 동기화
         self._success("오탐 등록",
                       f"{added}건을 오탐(제외)으로 등록했습니다. 다음 점검부터 제외됩니다.")
 
@@ -3422,6 +3547,51 @@ class MainWindow(QMainWindow):
     def _success(self, title: str, message: str):
         self._notice(title, message, "success")
 
+    # -------------------------------------------------------- 업데이트 확인
+    def _check_update(self):
+        """GitHub Releases 최신 버전과 비교(버튼 클릭 시 1회 조회)."""
+        from PySide6.QtCore import QThread, Signal
+
+        self._upd_btn.setEnabled(False)
+        self._upd_btn.setText("확인 중...")
+
+        class _Worker(QThread):
+            result = Signal(object, str)
+
+            def run(self):
+                try:
+                    from .updates import check_for_update
+                    cur = getattr(__import__("soliguard"), "__version__", "0.0.0")
+                    self.result.emit(check_for_update(current=cur), "")
+                except Exception as e:  # UpdateError 포함
+                    self.result.emit(None, str(e))
+
+        self._upd_worker = _Worker()
+        self._upd_worker.result.connect(self._on_update_result)
+        self._upd_worker.start()
+
+    def _on_update_result(self, info, error: str):
+        self._upd_btn.setEnabled(True)
+        self._upd_btn.setText("업데이트 확인")
+        if error:
+            self._warn("업데이트 확인 실패", error)
+            return
+        if info.is_newer:
+            self._upd_status.setText(f"새 버전 v{info.latest} 있음 (현재 v{info.current})")
+            self._upd_status.setStyleSheet("color:#B0123F; font-size:12px; font-weight:700;")
+            import webbrowser
+            NoticeDialog(
+                self, "업데이트 있음",
+                f"새 버전 v{info.latest} 이(가) 있습니다. 현재 버전은 v{info.current}입니다.\n"
+                "릴리스 페이지에서 최신 설치본을 받을 수 있습니다.",
+                kind="info",
+                action_label="  릴리스 페이지 열기",
+                on_action=lambda u=info.download_url: webbrowser.open(u),
+            ).exec()
+        else:
+            self._upd_status.setText(f"최신 버전을 사용 중입니다 (v{info.current})")
+            self._notice("업데이트", f"최신 버전을 사용 중입니다 (v{info.current}).")
+
     def _toast(self, message: str):
         from PySide6.QtCore import QTimer
         if getattr(self, "_toast_label", None) is None:
@@ -3447,18 +3617,10 @@ class MainWindow(QMainWindow):
 
 
 def _read_audit_tail(n: int) -> list:
+    """감사 로그 마지막 n건을 오래된→최신 순으로(기존 호출부 호환)."""
     try:
         from . import actions
-        if not actions.AUDIT_LOG.exists():
-            return []
-        lines = actions.AUDIT_LOG.read_text(encoding="utf-8").strip().splitlines()
-        out = []
-        for line in lines[-n:]:
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-        return out
+        return list(reversed(actions.read_audit(limit=n)))  # 최신순 → 오래된순
     except Exception:
         return []
 

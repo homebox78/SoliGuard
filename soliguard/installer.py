@@ -13,9 +13,10 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QFileDialog, QFrame, QGraphicsDropShadowEffect,
@@ -33,80 +34,141 @@ SAFE_BG = "#E7F6EC"
 STEPS = ["환영", "사용권 계약", "설치 위치", "구성요소", "설치", "완료"]
 
 TASK_NAME = "SoliGuard_PeriodicScan"
+_UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\SoliGuard"
 
 
-def default_install_dir() -> Path:
-    """관리자 권한 없이 쓸 수 있는 사용자 폴더(per-user 설치)."""
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
-    return Path(base) / "Programs" / "SoliGuard"
+# ---------------------------------------------------------------------------
+# 실제 설치 로직 (커스텀 설치기)
+# ---------------------------------------------------------------------------
+def default_install_dir() -> str:
+    """관리자 권한 없이 설치 가능한 사용자 영역(기본값)."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "Programs", "SoliGuard")
 
 
-def _source_exe() -> Path | None:
-    """PyInstaller 번들이면 실행 중인 exe 경로, 개발 환경이면 None."""
-    return Path(sys.executable) if getattr(sys, "frozen", False) else None
+def _payload_source() -> Path | None:
+    """설치할 앱 페이로드. 빌드된 설치기에선 번들 zip, 개발 환경에선 dist 폴더."""
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        z = Path(base) / "payload.zip"
+        if z.exists():
+            return z
+    root = Path(__file__).resolve().parent.parent
+    for cand in (root / "build" / "payload.zip", root / "dist" / "SoliGuard"):
+        if cand.exists():
+            return cand
+    return None
 
 
-def _create_shortcut(lnk: Path, target: Path) -> None:
-    """WScript.Shell COM 으로 .lnk 바로가기 생성(권한 불필요).
+def _start_menu_dir() -> Path:
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return Path(base) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "SoliGuard"
 
-    경로를 PowerShell 단일 인용 문자열에 넣으므로, 따옴표 주입을 막기 위해
-    작은따옴표를 PowerShell 규칙('' )으로 이스케이프한다."""
+
+def _make_shortcut(lnk: Path, target: Path) -> None:
     lnk.parent.mkdir(parents=True, exist_ok=True)
-
-    def q(p) -> str:
-        return str(p).replace("'", "''")
-
     ps = (
-        "$w = New-Object -ComObject WScript.Shell; "
-        f"$s = $w.CreateShortcut('{q(lnk)}'); "
-        f"$s.TargetPath = '{q(target)}'; "
-        f"$s.WorkingDirectory = '{q(target.parent)}'; "
-        f"$s.IconLocation = '{q(target)}'; "
-        f"$s.Description = 'SoliGuard'; "
-        "$s.Save()"
+        f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}');"
+        f"$s.TargetPath='{target}';$s.WorkingDirectory='{target.parent}';"
+        f"$s.IconLocation='{target}';$s.Save()"
     )
-    subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-        capture_output=True, check=False,
-    )
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                   capture_output=True)
 
 
-def _register_autoscan_task(exe: Path) -> None:
-    """매주 월요일 09:00 무인 점검(SoliGuard.exe --once) 작업 등록."""
+def _register_task(agent_exe: Path) -> None:
     subprocess.run(
-        ["schtasks", "/Create", "/TN", TASK_NAME,
-         "/TR", f'"{exe}" --once',
+        ["schtasks", "/Create", "/TN", TASK_NAME, "/TR", f'"{agent_exe}" --once',
          "/SC", "WEEKLY", "/D", "MON", "/ST", "09:00", "/F"],
-        capture_output=True, check=False,
+        capture_output=True)
+
+
+def _register_uninstall(target: Path, exe: Path, version: str = "0.4.0") -> None:
+    """프로그램 추가/제거(HKCU) 항목 등록 — 관리자 권한 불필요."""
+    try:
+        import winreg
+    except ImportError:
+        return
+    sm = _start_menu_dir()
+    desktop = Path(os.path.expanduser("~/Desktop")) / "SoliGuard.lnk"
+    uninstall = (
+        'cmd /c "'
+        f'schtasks /Delete /TN {TASK_NAME} /F & '
+        f'del /q \"{sm}\\*.lnk\" & rmdir /s /q \"{sm}\" & '
+        f'del /q \"{desktop}\" & '
+        f'reg delete \"HKCU\\{_UNINSTALL_KEY}\" /f & '
+        f'rmdir /s /q \"{target}\""'
     )
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _UNINSTALL_KEY) as k:
+        for name, val in [
+            ("DisplayName", "SoliGuard"), ("DisplayVersion", version),
+            ("Publisher", "Solideo"), ("InstallLocation", str(target)),
+            ("DisplayIcon", str(exe)), ("UninstallString", uninstall),
+            ("NoModify", None), ("NoRepair", None),
+        ]:
+            if name in ("NoModify", "NoRepair"):
+                winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, 1)
+            else:
+                winreg.SetValueEx(k, name, 0, winreg.REG_SZ, val)
 
 
-def perform_install(dest_dir: Path, opts: dict) -> Path:
-    """실제 설치 수행: exe 복사 + 바로가기 + 자동점검 작업 등록.
+class _InstallWorker(QThread):
+    """파일 복사·바로가기·작업등록·제거정보 등록을 백그라운드로 수행."""
 
-    설치된 SoliGuard.exe 경로를 반환한다(개발 환경에서는 원본 경로).
-    """
-    dest_dir = Path(dest_dir)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    target_exe = dest_dir / "SoliGuard.exe"
+    progress = Signal(int, str)
+    done = Signal(bool, str)
 
-    src = _source_exe()
-    if src is not None and src.resolve() != target_exe.resolve():
-        shutil.copy2(src, target_exe)
+    def __init__(self, target: str, opts: dict):
+        super().__init__()
+        self.target = Path(target)
+        self.opts = opts
 
-    if opts.get("desktop"):
-        desktop = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
-        _create_shortcut(desktop / "SoliGuard.lnk", target_exe)
+    def run(self):
+        try:
+            self._install()
+            self.done.emit(True, "")
+        except Exception as e:
+            self.done.emit(False, str(e))
 
-    if opts.get("startmenu"):
-        appdata = os.environ.get("APPDATA", str(Path.home()))
-        sm = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-        _create_shortcut(sm / "SoliGuard.lnk", target_exe)
+    def _install(self):
+        src = _payload_source()
+        if src is None:
+            raise RuntimeError("설치 페이로드를 찾을 수 없습니다(빌드 누락).")
+        self.target.mkdir(parents=True, exist_ok=True)
+        self.progress.emit(3, "파일 압축 해제 중...")
 
-    if opts.get("autoscan"):
-        _register_autoscan_task(target_exe)
+        if src.is_file():  # payload.zip
+            with zipfile.ZipFile(src) as z:
+                members = z.namelist()
+                n = len(members) or 1
+                for i, m in enumerate(members, 1):
+                    z.extract(m, self.target)
+                    if i % 40 == 0 or i == n:
+                        self.progress.emit(3 + int(i / n * 77), f"파일 배치 {i}/{n}")
+        else:  # dist 폴더 직접 복사(개발 환경)
+            files = [p for p in src.rglob("*") if p.is_file()]
+            n = len(files) or 1
+            for i, p in enumerate(files, 1):
+                dst = self.target / p.relative_to(src)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, dst)
+                if i % 40 == 0 or i == n:
+                    self.progress.emit(3 + int(i / n * 77), f"파일 배치 {i}/{n}")
 
-    return target_exe
+        exe = self.target / "SoliGuard.exe"
+        agent = self.target / "SoliGuardAgent.exe"
+        if self.opts.get("startmenu"):
+            self.progress.emit(84, "시작 메뉴 등록")
+            _make_shortcut(_start_menu_dir() / "SoliGuard.lnk", exe)
+        if self.opts.get("desktop"):
+            self.progress.emit(89, "바탕화면 바로가기 생성")
+            _make_shortcut(Path(os.path.expanduser("~/Desktop")) / "SoliGuard.lnk", exe)
+        if self.opts.get("autoscan"):
+            self.progress.emit(93, "주간 자동 점검 등록(월 09:00)")
+            _register_task(agent)
+        self.progress.emit(97, "설치 정보 등록")
+        _register_uninstall(self.target, exe)
+        self.progress.emit(100, "설치 마무리 중...")
 
 
 def _qss(fam: str) -> str:
@@ -331,16 +393,14 @@ class InstallerWizard(QWidget):
         self.run_now = True
         self.opts = {"desktop": True, "startmenu": True, "autoscan": True, "ocr": True}
         self._index = 0
-        self.installed_exe: Path | None = None   # 실제 설치된 SoliGuard.exe 경로
-        self.install_error: str | None = None
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 20, 20, 20)  # 그림자 여백
+        outer.setContentsMargins(26, 24, 26, 30)  # 그림자 여백(블러가 잘리지 않게)
         self.win = QFrame()
         self.win.setObjectName("Win")
         self.win.setStyleSheet(_qss(self.fam))
         sh = QGraphicsDropShadowEffect(self)
-        sh.setBlurRadius(60); sh.setOffset(0, 18); sh.setColor(QColor(0, 0, 0, 120))
+        sh.setBlurRadius(34); sh.setOffset(0, 6); sh.setColor(QColor(15, 23, 42, 55))
         self.win.setGraphicsEffect(sh)
         outer.addWidget(self.win)
 
@@ -552,7 +612,7 @@ class InstallerWizard(QWidget):
         lab.setStyleSheet(f"font-size:12.5px; font-weight:600; color:{T['text2']};")
         v.addWidget(lab); v.addSpacing(7)
         row = QHBoxLayout(); row.setSpacing(8)
-        self.path_edit = QLineEdit(str(default_install_dir()))
+        self.path_edit = QLineEdit(default_install_dir())
         self.path_edit.setObjectName("Fld")
         self.path_edit.setFixedHeight(42)
         row.addWidget(self.path_edit, 1)
@@ -600,7 +660,8 @@ class InstallerWizard(QWidget):
         trust = QFrame(); trust.setObjectName("Trust")
         th = QHBoxLayout(trust); th.setContentsMargins(14, 12, 14, 12); th.setSpacing(9)
         th.addWidget(_ic("shield", 15, BRAND["ink"], 2))
-        tl = QLabel("설치 시 관리자 권한(UAC) 요청 창이 나타나면 “예”를 눌러 진행하세요.")
+        tl = QLabel("사용자 영역에 설치되어 관리자 권한이 필요 없습니다. "
+                    "모든 처리는 이 PC에서만 수행됩니다.")
         tl.setObjectName("TrustText"); tl.setWordWrap(True)
         th.addWidget(tl, 1)
         v.addWidget(trust)
@@ -695,14 +756,10 @@ class InstallerWizard(QWidget):
         v.addWidget(body); v.addSpacing(18)
         self.run_btn = self._check_card("지금 솔리가드 실행", True,
                                         lambda on: setattr(self, "run_now", on))
-        # 가운데 정렬하되 라벨이 잘리지 않도록 너비 확보(좌우 stretch 로 센터링).
-        self.run_btn.setMinimumWidth(260)
-        self.run_btn.setMaximumWidth(360)
-        run_row = QHBoxLayout()
-        run_row.addStretch()
-        run_row.addWidget(self.run_btn)
-        run_row.addStretch()
-        v.addLayout(run_row)
+        self.run_btn.setFixedWidth(300)  # 고정 폭 — 라벨이 잘려 사라지지 않게
+        rrow = QHBoxLayout(); rrow.setContentsMargins(0, 0, 0, 0)
+        rrow.addStretch(); rrow.addWidget(self.run_btn); rrow.addStretch()
+        v.addLayout(rrow)
         v.addStretch()
         return w
 
@@ -773,51 +830,35 @@ class InstallerWizard(QWidget):
         self._sync()
 
     def _start_progress(self):
-        lines = ["파일 압축 해제 중...",
-                 "검출 엔진 설치 (detectors · scanner · engine)",
-                 "한글(HWP) 파서 구성요소 등록"]
-        if self.opts["ocr"]:
-            lines.append("Tesseract 한국어 OCR 데이터 배치")
-        if self.opts["desktop"]:
-            lines.append("바탕화면 바로가기 생성")
-        if self.opts["startmenu"]:
-            lines.append("시작 메뉴 등록")
-        if self.opts["autoscan"]:
-            lines.append("작업 스케줄러에 주간 점검(월 09:00) 등록")
-        lines.append("설치 마무리 중...")
-        self._lines = lines
-        self._pct = 0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._tick)
-        self._timer.start(34)
-        # 진행 화면이 먼저 그려진 뒤 실제 설치를 수행(파일 복사·바로가기·작업 등록).
-        QTimer.singleShot(60, self._do_real_install)
+        """실제 설치를 백그라운드 워커로 수행하며 진행률을 표시."""
+        self.install_dir = self.path_edit.text().strip() or default_install_dir()
+        self.bar.setValue(0); self.pct_label.setText("0%")
+        self.prog_line.setStyleSheet(
+            f"color:{T['text2']}; font-size:12.5px;"
+            "font-family:'JetBrains Mono','D2Coding',monospace;")
+        self.prog_line.setText("설치 준비 중...")
+        self._worker = _InstallWorker(self.install_dir, dict(self.opts))
+        self._worker.progress.connect(self._on_prog)
+        self._worker.done.connect(self._on_install_done)
+        self._worker.start()
 
-    def _do_real_install(self):
-        try:
-            self.installed_exe = perform_install(self.path_edit.text().strip(), self.opts)
-        except Exception as e:  # 권한·디스크 등 실패 시 메시지 보관
-            self.install_error = str(e)
+    def _on_prog(self, pct: int, line: str):
+        self.bar.setValue(pct)
+        self.pct_label.setText(f"{pct}%")
+        self.prog_line.setText(line)
 
-    def _tick(self):
-        self._pct = min(100, self._pct + 2)
-        self.bar.setValue(self._pct)
-        self.pct_label.setText(f"{self._pct}%")
-        li = min(len(self._lines) - 1, self._pct * len(self._lines) // 100)
-        self.prog_line.setText(self._lines[li])
-        if self._pct >= 100:
-            self._timer.stop()
-            QTimer.singleShot(400, self._goto_done)
+    def _on_install_done(self, ok: bool, err: str):
+        if ok:
+            QTimer.singleShot(300, self._goto_done)
+        else:
+            self.prog_line.setStyleSheet("color:#B0123F; font-size:12.5px;")
+            self.prog_line.setText(f"설치 실패: {err}")
+            self.foot.setVisible(True)
+            self.next_btn.setVisible(False)
+            self.back_btn.setVisible(True)
+            self.cancel_btn.setVisible(True)
 
     def _goto_done(self):
-        if self.install_error:
-            from PySide6.QtWidgets import QMessageBox
-            QMessageBox.warning(
-                self, "설치 경고",
-                "설치 중 일부 단계가 실패했습니다:\n\n"
-                f"{self.install_error}\n\n"
-                "다른 설치 위치를 선택하거나 권한을 확인해 주세요.",
-            )
         self._index = 5
         self._sync()
 
@@ -830,24 +871,14 @@ def main() -> int:
     _refs = {}
 
     def on_done(run_now: bool):
-        # 설치 완료 마커 기록(다음 실행부터는 마법사를 건너뛰고 바로 앱 실행).
-        from .config import CONFIG_DIR
-        try:
-            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            (CONFIG_DIR / ".installed").write_text("1", encoding="utf-8")
-        except OSError:
-            pass
-        if not run_now:
-            app.quit()
-            return
-        # 설치된 위치의 exe 로 앱 실행(번들 배포 시). 개발 환경은 인프로세스 실행.
-        exe = wiz.installed_exe
-        if getattr(sys, "frozen", False) and exe and Path(exe).exists():
-            subprocess.Popen([str(exe)], close_fds=True)
-            app.quit()
-        else:
-            from .app import SoliGuardApp
-            _refs["app"] = SoliGuardApp()
+        if run_now:
+            exe = Path(getattr(wiz, "install_dir", "") or "") / "SoliGuard.exe"
+            try:
+                if exe.exists():
+                    subprocess.Popen([str(exe)], cwd=str(exe.parent))
+            except OSError:
+                pass
+        app.quit()
 
     wiz.finished_install.connect(on_done)
     wiz.show()

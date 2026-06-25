@@ -78,6 +78,10 @@ class Detector(ABC):
     #: 구조화 필드(컬럼 헤더·JSON 키)에 이 부분문자열이 있으면 이 검출기의
     #: 유형으로 강하게 추정 → 검증 실패 후보도 '필드 보강'으로 구제한다.
     field_keywords: tuple[str, ...] = ()
+    #: 필드 라벨이 유형과 일치할 때 적용할 위험도(문맥 의존형 유형의 승격용).
+    #: None이면 항상 기본 severity를 쓴다. 예: 여권/면허는 자유 텍스트에서 MEDIUM,
+    #: '여권'/'면허' 열에 있으면 HIGH로 승격.
+    field_severity: "Severity | None" = None
 
     @property
     def pattern(self) -> re.Pattern[str]:

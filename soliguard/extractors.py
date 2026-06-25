@@ -73,32 +73,37 @@ class _DocBuilder:
 
 SUPPORTED_TEXT = {
     # 일반 텍스트·데이터
-    ".txt", ".csv", ".tsv", ".log", ".json", ".xml", ".md", ".rst",
+    ".txt", ".csv", ".tsv", ".log", ".json", ".jsonl", ".ndjson", ".json5",
+    ".xml", ".md", ".rst",
     # 소스코드(개발자 직무 — 평문으로 전부 읽힘)
     ".py", ".java", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".vue",
-    ".svelte", ".php", ".rb", ".go", ".rs", ".kt", ".kts", ".swift",
+    ".svelte", ".astro", ".php", ".rb", ".go", ".rs", ".kt", ".kts", ".swift",
     ".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cs", ".scala", ".dart",
     ".lua", ".pl", ".pm", ".r", ".groovy", ".gradle", ".jsp", ".asp",
-    ".aspx", ".vb", ".sql", ".graphql", ".gql", ".proto",
+    ".aspx", ".cshtml", ".erb", ".ejs", ".hbs", ".twig",
+    ".vb", ".sql", ".graphql", ".gql", ".proto",
     # 웹·스타일
     ".html", ".htm", ".css", ".scss", ".sass", ".less",
     # 설정·인프라
     ".yml", ".yaml", ".ini", ".cfg", ".conf", ".config", ".toml",
     ".properties", ".env", ".tf", ".tfvars", ".dockerfile", ".sh",
     ".bash", ".zsh", ".bat", ".cmd", ".ps1", ".psm1",
-    # 경량 DB 덤프(텍스트). 바이너리 .db/.sqlite 도 best-effort 로 읽는다.
-    ".db", ".sqlite", ".sqlite3",
+    # DB/백업 — 텍스트 덤프(SQL 스크립트, mysqldump/pg_dump 등).
+    # 바이너리 .db/.sqlite 도 best-effort 로 읽는다.
+    ".ddl", ".dump", ".bak", ".db", ".sqlite", ".sqlite3",
 }
 SUPPORTED_OFFICE = {".xlsx", ".xls", ".docx", ".pptx"}
 SUPPORTED_HWP = {".hwp", ".hwpx"}
 SUPPORTED_PDF = {".pdf"}
 SUPPORTED_IMAGE = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+# DB 파일(백업된 고객 데이터) — SQLite 바이너리. SI 개발자 PC 대응.
+SUPPORTED_DB = {".db", ".sqlite", ".sqlite3", ".db3"}
 # 디자인 파일(디자이너 직무). 실제 추출은 design_extractors 가 담당.
 SUPPORTED_DESIGN = {".psd", ".psb", ".xd"}
 
 _ALL_SUPPORTED = (
     SUPPORTED_TEXT | SUPPORTED_OFFICE | SUPPORTED_HWP | SUPPORTED_PDF
-    | SUPPORTED_IMAGE | SUPPORTED_DESIGN
+    | SUPPORTED_IMAGE | SUPPORTED_DB | SUPPORTED_DESIGN
 )
 
 
@@ -106,11 +111,30 @@ def is_supported(path: str | Path) -> bool:
     return Path(path).suffix.lower() in _ALL_SUPPORTED
 
 
+#: 추출 시 메모리에 통째로 올리는 포맷의 파일 크기 상한(초과 시 검사불가).
+#: SQLite(.db 등)는 행 상한으로 스트리밍하므로 이 제한에서 제외한다.
+MAX_EXTRACT_BYTES = 200 * 1024 * 1024  # 200MB
+
+
+def _guard_size(path: Path) -> None:
+    if path.suffix.lower() in SUPPORTED_DB:
+        return
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return
+    if size > MAX_EXTRACT_BYTES:
+        raise ExtractionError(
+            f"파일이 너무 커서 건너뜀 "
+            f"({size // (1024 * 1024)}MB > {MAX_EXTRACT_BYTES // (1024 * 1024)}MB)")
+
+
 def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
     """확장자에 맞는 추출기로 분기. 실패 시 ExtractionError."""
     path = Path(path)
     ext = path.suffix.lower()
     try:
+        _guard_size(path)
         if ext in SUPPORTED_TEXT:
             return _extract_plain(path)
         if ext == ".xlsx":
@@ -127,6 +151,8 @@ def extract_text(path: str | Path, ocr_enabled: bool = True) -> str:
             return _extract_hwp_ole(path)
         if ext == ".pdf":
             return _extract_pdf(path, ocr_enabled)
+        if ext in SUPPORTED_DB:
+            return _extract_sqlite(path)
         if ext in SUPPORTED_IMAGE:
             return _extract_image(path) if ocr_enabled else ""
         if ext in SUPPORTED_DESIGN:
@@ -147,15 +173,20 @@ def extract_doc(path: str | Path, ocr_enabled: bool = True) -> ExtractedDoc:
     그 외 포맷은 기존 extract_text 결과를 라벨 없는 ExtractedDoc 로 감싼다."""
     path = Path(path)
     ext = path.suffix.lower()
+    _guard_size(path)  # 초과 시 ExtractionError → 검사불가
     try:
         if ext == ".csv":
             return _doc_csv(path)
+        if ext == ".tsv":
+            return _doc_csv(path, delimiter="\t")
         if ext == ".json":
             return _doc_json(path)
         if ext == ".xlsx":
             return _doc_xlsx(path)
         if ext == ".xls":
             return _doc_xls(path)
+        if ext in SUPPORTED_DB:
+            return _doc_sqlite(path)
     except ExtractionError:
         raise
     except Exception:
@@ -167,13 +198,13 @@ def extract_doc(path: str | Path, ocr_enabled: bool = True) -> ExtractedDoc:
 # ---------------------------------------------------------------------------
 # 구조 인식 추출 (표/JSON) — 필드 라벨 부착
 # ---------------------------------------------------------------------------
-def _doc_csv(path: Path) -> ExtractedDoc:
-    """CSV: 첫 비어있지 않은 행을 헤더로 삼아 각 셀에 컬럼 라벨을 부여."""
+def _doc_csv(path: Path, delimiter: str = ",") -> ExtractedDoc:
+    """CSV/TSV: 첫 비어있지 않은 행을 헤더로 삼아 각 셀에 컬럼 라벨을 부여."""
     raw = path.read_bytes()
     if not raw:
         return ExtractedDoc("", [])
     text = _decode_bytes(raw)
-    reader = csv.reader(io.StringIO(text))
+    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     rows = [r for r in reader]
     header: list[str] = []
     b = _DocBuilder()
@@ -258,6 +289,77 @@ def _doc_xls(path: Path) -> ExtractedDoc:
             for i, c in enumerate(cells):
                 label = header[i] if i < len(header) else ""
                 b.add(c, label)
+    return b.build()
+
+
+# ---------------------------------------------------------------------------
+# DB 파일(백업된 고객 데이터) — SQLite. SI 개발자 PC의 .db/.sqlite 대응.
+# ---------------------------------------------------------------------------
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+_DB_ROW_LIMIT = 50000           # 테이블당 최대 행(과도한 메모리 방지)
+
+
+def _is_sqlite(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(16) == _SQLITE_MAGIC
+    except OSError:
+        return False
+
+
+def _sqlite_tables(cur) -> list[str]:
+    return [r[0] for r in cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%'")]
+
+
+def _extract_sqlite(path: Path) -> str:
+    """SQLite DB의 모든 테이블 텍스트 셀을 추출. SQLite가 아니면 평문 폴백."""
+    if not _is_sqlite(path):
+        return _extract_plain(path)   # .db 가 텍스트일 수도 있음
+    import sqlite3
+    parts: list[str] = []
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        cur = conn.cursor()
+        for t in _sqlite_tables(cur):
+            try:
+                rows = cur.execute(
+                    f'SELECT * FROM "{t}" LIMIT {_DB_ROW_LIMIT}').fetchall()
+            except sqlite3.Error:
+                continue
+            for row in rows:
+                cells = [str(c) for c in row
+                         if c is not None and not isinstance(c, (bytes, bytearray))]
+                if cells:
+                    parts.append(" ".join(cells))
+    finally:
+        conn.close()
+    return "\n".join(parts)
+
+
+def _doc_sqlite(path: Path) -> ExtractedDoc:
+    """SQLite DB를 컬럼명 라벨과 함께 구조 추출(예: 'rrn'/'phone' 컬럼 → 필드 구제)."""
+    if not _is_sqlite(path):
+        return ExtractedDoc(_extract_plain(path), [])
+    import sqlite3
+    b = _DocBuilder()
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        cur = conn.cursor()
+        for t in _sqlite_tables(cur):
+            try:
+                cur.execute(f'SELECT * FROM "{t}" LIMIT {_DB_ROW_LIMIT}')
+            except sqlite3.Error:
+                continue
+            cols = [d[0] for d in (cur.description or [])]
+            for row in cur.fetchall():
+                for i, c in enumerate(row):
+                    if c is None or isinstance(c, (bytes, bytearray)):
+                        continue
+                    b.add(c, cols[i] if i < len(cols) else "")
+    finally:
+        conn.close()
     return b.build()
 
 
@@ -518,18 +620,25 @@ def _extract_image(path: Path) -> str:
     return pytesseract.image_to_string(img, lang=lang)
 
 
+#: 스캔 PDF OCR 최대 페이지(대용량 스캔본의 시간·메모리 폭주 방지)
+MAX_OCR_PAGES = 30
+
+
 def _ocr_pdf(path: Path) -> str:
-    """스캔 PDF를 이미지로 변환 후 OCR. pdf2image + pytesseract 필요."""
+    """스캔 PDF를 이미지로 변환 후 OCR. pdf2image + pytesseract 필요.
+
+    선두 MAX_OCR_PAGES 페이지까지만 처리한다(대용량 스캔본 보호)."""
     try:
         from pdf2image import convert_from_path  # type: ignore
         import pytesseract  # type: ignore
     except ImportError:
         raise ExtractionError("스캔 PDF OCR에 pdf2image/pytesseract 가 필요합니다")
     lang = _configure_ocr()
-    parts = [
-        pytesseract.image_to_string(img, lang=lang)
-        for img in convert_from_path(str(path), dpi=200)
-    ]
+    images = convert_from_path(
+        str(path), dpi=200, first_page=1, last_page=MAX_OCR_PAGES)
+    parts = [pytesseract.image_to_string(img, lang=lang) for img in images]
+    if len(images) >= MAX_OCR_PAGES:
+        parts.append(f"[안내] OCR은 선두 {MAX_OCR_PAGES}페이지까지만 검사했습니다.")
     return "\n".join(parts)
 
 
